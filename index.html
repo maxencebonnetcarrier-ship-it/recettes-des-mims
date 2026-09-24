@@ -8,20 +8,20 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>🍲 Recettes des Mim's</h1>
-  </header>
+  <header><h1>🍲 Recettes des Mim's</h1></header>
 
   <main>
     <section id="view-semaine" class="view active"></section>
+    <section id="view-courses" class="view"></section>
     <section id="view-recettes" class="view"></section>
-    <section id="view-historique" class="view"></section>
+    <section id="view-reglages" class="view"></section>
   </main>
 
   <nav class="tabbar">
     <button class="tab active" data-view="semaine">📅<span>Semaine</span></button>
+    <button class="tab" data-view="courses">🛒<span>Courses</span></button>
     <button class="tab" data-view="recettes">📖<span>Recettes</span></button>
-    <button class="tab" data-view="historique">🕑<span>Historique</span></button>
+    <button class="tab" data-view="reglages">⚙️<span>Réglages</span></button>
   </nav>
 
   <script src="data.js"></script>

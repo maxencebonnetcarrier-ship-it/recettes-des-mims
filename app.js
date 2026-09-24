@@ -1,180 +1,248 @@
-/* Recettes des Mim's — logique générateur + UI */
+/* Recettes des Mim's — générateur de menu, liste de courses, exclusions */
 (function () {
   "use strict";
 
-  const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-  const STORE = "mims_state_v1";
+  const STORE = "mims_state_v2";
+  const PARTS_CIBLE = 4; // 3 au soir + 1 midi
+  const ORDRE_RAYONS = ["Boucherie", "Poissonnerie", "Fruits & légumes", "Crèmerie", "Boulangerie", "Épicerie"];
 
   // ---------- utils ----------
-  const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const fmtTemps = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) : ""}` : `${m} min`);
-  const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const norm = (s) => (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const esc = (s) => (s || "").toString().replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  function fmtDuree(m) {
+    if (!m) return "—";
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? `${h} h ${r}` : `${h} h`;
+  }
+  function tempsRecette(r) {
+    const total = r.total_min || ((r.prep_min || 0) + (r.cuisson_min || 0));
+    let d = `⏱️ ${fmtDuree(total)}`;
+    if (r.prep_min && r.cuisson_min) d += ` (prépa ${fmtDuree(r.prep_min)} + cuisson ${fmtDuree(r.cuisson_min)})`;
+    return d;
+  }
   function saisonActuelle() {
-    const m = new Date().getMonth(); // 0=jan
+    const m = new Date().getMonth();
     if (m >= 2 && m <= 4) return "printemps";
     if (m >= 5 && m <= 7) return "ete";
     if (m >= 8 && m <= 10) return "automne";
     return "hiver";
   }
-  function recetteDeSaison(r) {
+  function deSaison(r) {
     const s = norm(r.saison);
-    if (s.includes("toute")) return true;
-    const sais = saisonActuelle();
-    return s.includes(sais);
+    return !s || s.includes("toute") || s.includes(saisonActuelle());
   }
-  function contientExclu(r) {
-    return r.ingr.some((ing) => EXCLUS.some((ex) => norm(ing).includes(norm(ex))));
-  }
-  function saveurDe(r) {
-    for (const sv of SAVEURS) {
-      if (r.ingr.some((ing) => norm(ing).includes(norm(sv)))) return sv;
-    }
-    return null;
-  }
-  function estPoissonGras(r) { return r.tags.includes("poisson gras"); }
-
-  // ---------- state ----------
-  function loadState() {
-    try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; }
-  }
-  function saveState(s) { localStorage.setItem(STORE, JSON.stringify(s)); }
-  let state = loadState();
-  if (!state.semaine) state.semaine = null;      // {num, plan:[{jour,nom}]}
-  if (!state.historique) state.historique = [];  // [{num,jour,nom,fait,note,comment}]
-
   function numSemaineISO(d) {
     d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const day = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - day);
-    const yStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d - yStart) / 86400000) + 1) / 7);
+    const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - y) / 86400000) + 1) / 7);
   }
-  // recettes vues sur les 3 dernières semaines (num courant inclus)
-  function recentesInterdites(numCourant) {
-    const set = new Set();
-    state.historique.forEach((h) => {
-      if (numCourant - h.num >= 0 && numCourant - h.num < 3) set.add(h.nom);
-    });
-    return set;
+
+  // ---------- state ----------
+  function load() { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; } }
+  const save = () => localStorage.setItem(STORE, JSON.stringify(state));
+  let state = load();
+  if (!state.semaine) state.semaine = null;
+  if (!state.historique) state.historique = [];
+  if (!state.exclusions) state.exclusions = EXCLUS_DEFAUT.slice();
+  if (!state.coursesCochees) state.coursesCochees = {};
+
+  const estExclu = (r) => r.ingredients.some((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))));
+
+  function ajouterExclusion(mot) {
+    const m = (mot || "").trim();
+    if (!m) return false;
+    if (state.exclusions.some((e) => norm(e) === norm(m))) return false;
+    state.exclusions.push(m);
+    save();
+    return true;
   }
 
   // ---------- générateur ----------
-  function eligibles(cadre, interdites) {
-    return RECIPES.filter((r) => {
-      if (!cadre.cats.includes(r.cat)) return false;
-      if (cadre.maxMin && r.min > cadre.maxMin) return false;
-      if (!recetteDeSaison(r)) return false;
-      if (contientExclu(r)) return false;
-      if (interdites.has(r.nom)) return false;
-      return true;
-    });
+  function recentes(numAvant) {
+    const set = new Set();
+    state.historique.forEach((h) => { if (numAvant - h.num >= 0 && numAvant - h.num < 3) set.add(h.nom); });
+    return set;
   }
 
-  function genererSemaine() {
+  function candidats(cadre, interdites) {
+    return RECIPES.filter((r) =>
+      cadre.cats.includes(r.cat) &&
+      (!cadre.maxMin || (r.total_min || 0) <= cadre.maxMin) &&
+      deSaison(r) && !estExclu(r) && !interdites.has(r.nom)
+    );
+  }
+
+  function saveurDe(r) {
+    for (const sv of SAVEURS) if (r.ingredients.some((i) => norm(i.nom).includes(norm(sv)))) return sv;
+    return null;
+  }
+
+  /* Choisit une recette en évitant : la protéine des jours adjacents (règle dure),
+     la même protéine plus de 2x dans la semaine, et une saveur déjà utilisée. */
+  function choisir(cadre, interdites, plan, idx) {
+    const protPrec = idx > 0 && plan[idx - 1] ? plan[idx - 1].proteine : null;
+    const protSuiv = plan[idx + 1] ? plan[idx + 1].proteine : null;
+    const compteProt = {};
+    plan.forEach((p, i) => { if (p && i !== idx) compteProt[p.proteine] = (compteProt[p.proteine] || 0) + 1; });
+    const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
+
+    const paliers = [
+      (r) => r.proteine !== protPrec && r.proteine !== protSuiv && (compteProt[r.proteine] || 0) < 2 && !saveursVues.has(saveurDe(r)),
+      (r) => r.proteine !== protPrec && r.proteine !== protSuiv && (compteProt[r.proteine] || 0) < 2,
+      (r) => r.proteine !== protPrec && r.proteine !== protSuiv,
+      (r) => r.proteine !== protPrec,
+    ];
+    let pool = shuffle(candidats(cadre, interdites));
+    if (!pool.length) pool = shuffle(RECIPES.filter((r) => cadre.cats.includes(r.cat) && !estExclu(r)));
+    for (const test of paliers) {
+      const hit = pool.find(test);
+      if (hit) return hit;
+    }
+    return pool[0] || null;
+  }
+
+  function generer() {
     const num = numSemaineISO(new Date());
-    const interdites = recentesInterdites(num - 1); // n'inclut pas la semaine qu'on génère
-    const plan = [];
-    const saveursUtilisees = new Set();
-    let poissonGrasOk = false;
-
-    for (const cadre of CADRE) {
-      let choix = shuffle(eligibles(cadre, interdites));
-      // éviter 2× la même saveur dominante
-      let pick = choix.find((r) => { const sv = saveurDe(r); return !sv || !saveursUtilisees.has(sv); });
-      // relâche la contrainte saison si rien
-      if (!pick) {
-        const relache = shuffle(RECIPES.filter((r) => cadre.cats.includes(r.cat) && (!cadre.maxMin || r.min <= cadre.maxMin) && !contientExclu(r) && !interdites.has(r.nom)));
-        pick = relache.find((r) => { const sv = saveurDe(r); return !sv || !saveursUtilisees.has(sv); }) || relache[0];
-      }
-      if (!pick) pick = choix[0] || RECIPES.find((r) => cadre.cats.includes(r.cat));
-      const sv = saveurDe(pick);
-      if (sv) saveursUtilisees.add(sv);
-      if (estPoissonGras(pick)) poissonGrasOk = true;
-      plan.push({ jour: cadre.jour, nom: pick.nom });
+    const interdites = recentes(num - 1);
+    const plan = new Array(CADRE.length).fill(null);
+    // jours les plus contraints d'abord (moins de candidats disponibles)
+    const ordre = CADRE.map((c, i) => ({ i, n: candidats(c, interdites).length })).sort((a, b) => a.n - b.n).map((o) => o.i);
+    for (const i of ordre) {
+      const r = choisir(CADRE[i], interdites, plan, i);
+      if (r) plan[i] = { jour: CADRE[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r) };
     }
-
-    // garantir ≥ 1 poisson gras : sinon basculer Jeudi (Poisson) puis Mardi (Légumineuses porteuse)
-    if (!poissonGrasOk) {
-      for (const j of ["Jeu", "Mar"]) {
-        const idx = plan.findIndex((p) => p.jour === j);
-        const cadre = CADRE.find((c) => c.jour === j);
-        const gras = shuffle(eligibles(cadre, interdites)).find(estPoissonGras)
-          || shuffle(RECIPES.filter((r) => cadre.cats.includes(r.cat) && estPoissonGras(r) && !contientExclu(r)))[0];
-        if (gras) { plan[idx] = { jour: j, nom: gras.nom }; poissonGrasOk = true; break; }
-      }
-    }
-
-    state.semaine = { num, plan };
-    saveState(state);
+    state.semaine = { num, plan: plan.filter(Boolean) };
+    save();
     return state.semaine;
   }
 
-  const getRecette = (nom) => RECIPES.find((r) => r.nom === nom);
+  function regenJour(jour) {
+    const s = state.semaine;
+    const idx = s.plan.findIndex((p) => p.jour === jour);
+    if (idx < 0) return;
+    const cadre = CADRE.find((c) => c.jour === jour);
+    const interdites = recentes(s.num - 1);
+    s.plan.forEach((p, i) => { if (i !== idx) interdites.add(p.nom); });
+    const copie = s.plan.slice(); copie[idx] = null;
+    const r = choisir(cadre, interdites, copie, idx);
+    if (r) { s.plan[idx] = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r) }; save(); }
+  }
+
+  const getR = (nom) => RECIPES.find((r) => r.nom === nom);
+
+  // ---------- liste de courses ----------
+  function listeCourses() {
+    const acc = {};
+    if (!state.semaine) return acc;
+    state.semaine.plan.forEach((p) => {
+      const r = getR(p.nom);
+      if (!r) return;
+      const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
+      r.ingredients.forEach((ing) => {
+        const rayon = ing.rayon || "Épicerie";
+        const key = norm(ing.nom);
+        acc[rayon] = acc[rayon] || {};
+        const e = acc[rayon][key] = acc[rayon][key] || { nom: ing.nom, unites: {}, plats: [] };
+        if (ing.qte) {
+          const u = ing.unite || "";
+          e.unites[u] = Math.round(((e.unites[u] || 0) + ing.qte * facteur) * 10) / 10;
+        }
+        if (!e.plats.includes(r.nom)) e.plats.push(r.nom);
+      });
+    });
+    return acc;
+  }
+  function fmtQte(unites) {
+    const parts = Object.entries(unites).filter(([u, q]) => q > 0).map(([u, q]) => `${q}${u ? " " + u : ""}`);
+    return parts.length ? parts.join(" + ") : "qs"; // qs = quantité suffisante
+  }
 
   // ---------- rendu ----------
-  function badge(txt, cls) { return `<span class="badge ${cls || ""}">${txt}</span>`; }
+  const badge = (t, c) => `<span class="badge ${c || ""}">${esc(t)}</span>`;
+
+  function blocRecette(r) {
+    const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
+    const ingr = r.ingredients.map((i) => {
+      const q = i.qte ? `${Math.round(i.qte * facteur * 10) / 10}${i.unite ? " " + i.unite : ""} ` : "";
+      return `<li><span class="iq">${esc(q)}</span>${esc(i.nom)}
+        <button class="x" data-act="exclure" data-ing="${esc(i.nom)}" title="Je n'aime pas — exclure">✕</button></li>`;
+    }).join("");
+    const etapes = (r.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
+    return `<details class="detail">
+      <summary>Ingrédients, étapes &amp; source</summary>
+      <div class="det-body">
+        <p class="det-t">Pour ${PARTS_CIBLE} parts</p>
+        <ul class="ing-list">${ingr}</ul>
+        ${etapes ? `<p class="det-t">Préparation</p><ol class="step-list">${etapes}</ol>` : ""}
+        ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}
+      </div>
+    </details>`;
+  }
 
   function renderSemaine() {
     const el = document.getElementById("view-semaine");
-    if (!state.semaine) { genererSemaine(); }
+    if (!state.semaine || !state.semaine.plan.length) generer();
     const s = state.semaine;
-    const grasCount = s.plan.filter((p) => estPoissonGras(getRecette(p.nom))).length;
-    let html = `<div class="week-head">
-      <div><strong>Semaine ${s.num}</strong> · 3 pers · 4 parts/plat</div>
-      <div class="week-flags">${grasCount >= 1 ? "🐟 poisson gras ✓" : "⚠️ pas de poisson gras"}</div>
-    </div>
-    <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button>
-    <div class="cards">`;
-
+    let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · 3 personnes · ${PARTS_CIBLE} parts par plat</div>
+      <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
     s.plan.forEach((p) => {
-      const r = getRecette(p.nom);
+      const r = getR(p.nom);
+      if (!r) return;
       const cadre = CADRE.find((c) => c.jour === p.jour);
-      const h = state.historique.find((x) => x.num === s.num && x.jour === p.jour);
-      const fait = h && h.fait;
-      html += `<div class="card day ${fait ? "done" : ""}">
-        <div class="card-top">
-          <span class="jour">${p.jour}</span>
-          <span class="cat">${r.cat}</span>
-        </div>
-        <div class="plat">${r.nom}</div>
-        <div class="meta">${badge(fmtTemps(r.min))} ${badge(r.piece)} ${r.tags.map((t) => badge(t, "tag")).join(" ")}</div>
-        <div class="constraint">${cadre ? cadre.note : ""}</div>
-        <div class="ingr">${r.ingr.join(" · ")}</div>
-        <div class="actions">
-          <button data-act="regen-day" data-jour="${p.jour}">↻ ce jour</button>
-          <button data-act="done" data-jour="${p.jour}" data-nom="${encodeURIComponent(r.nom)}">${fait ? "✓ Fait" : "Marquer fait"}</button>
-        </div>
+      html += `<div class="card day">
+        <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span></div>
+        <div class="plat">${esc(r.nom)}</div>
+        <div class="temps">${tempsRecette(r)}</div>
+        <div class="meta">${(r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ")} ${(r.tags || []).map((t) => badge(t, "tag")).join(" ")}</div>
+        <div class="constraint">${esc(cadre ? cadre.note : "")}</div>
+        ${blocRecette(r)}
+        <div class="actions"><button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer ce plat</button></div>
       </div>`;
     });
-    html += `</div>`;
-    el.innerHTML = html;
+    el.innerHTML = html + `</div>`;
   }
 
-  function regenJour(jour) {
-    const cadre = CADRE.find((c) => c.jour === jour);
-    const s = state.semaine;
-    const interdites = recentesInterdites(s.num - 1);
-    const dejaSemaine = new Set(s.plan.filter((p) => p.jour !== jour).map((p) => p.nom));
-    const saveurs = new Set(s.plan.filter((p) => p.jour !== jour).map((p) => saveurDe(getRecette(p.nom))).filter(Boolean));
-    let choix = shuffle(eligibles(cadre, interdites)).filter((r) => !dejaSemaine.has(r.nom));
-    let pick = choix.find((r) => { const sv = saveurDe(r); return !sv || !saveurs.has(sv); }) || choix[0];
-    if (!pick) pick = shuffle(RECIPES.filter((r) => cadre.cats.includes(r.cat) && !dejaSemaine.has(r.nom)))[0];
-    if (pick) {
-      const idx = s.plan.findIndex((p) => p.jour === jour);
-      s.plan[idx] = { jour, nom: pick.nom };
-      saveState(state);
-      renderSemaine();
-    }
+  function renderCourses() {
+    const el = document.getElementById("view-courses");
+    const acc = listeCourses();
+    const rayons = ORDRE_RAYONS.filter((r) => acc[r]).concat(Object.keys(acc).filter((r) => !ORDRE_RAYONS.includes(r)));
+    if (!rayons.length) { el.innerHTML = `<p class="empty">Génère d'abord un menu dans l'onglet Semaine.</p>`; return; }
+    let n = 0, html = `<p class="hint">Calculée pour ${PARTS_CIBLE} parts par plat, à partir du menu de la semaine.</p>`;
+    rayons.forEach((rayon) => {
+      const items = Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom));
+      html += `<h3 class="cat-title">${esc(rayon)}</h3><div class="shop-list">`;
+      items.forEach((it) => {
+        n++;
+        const id = norm(rayon + "|" + it.nom);
+        const ok = !!state.coursesCochees[id];
+        html += `<label class="shop-row ${ok ? "checked" : ""}">
+          <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
+          <span class="sq">${esc(fmtQte(it.unites))}</span>
+          <span class="sn">${esc(it.nom)}</span>
+          <span class="sp">${esc(it.plats.join(" · "))}</span>
+        </label>`;
+      });
+      html += `</div>`;
+    });
+    html += `<button id="btn-copy" class="primary ghost">📋 Copier la liste</button>
+      <button id="btn-reset-courses" class="linkbtn">Tout décocher</button>`;
+    el.innerHTML = `<div class="week-head"><strong>${n} articles</strong></div>` + html;
   }
 
-  function marquerFait(jour, nom) {
-    const s = state.semaine;
-    let h = state.historique.find((x) => x.num === s.num && x.jour === jour);
-    if (h) { h.fait = !h.fait; h.nom = nom; }
-    else { state.historique.push({ num: s.num, jour, nom, fait: true, note: 0, comment: "" }); }
-    saveState(state);
-    renderSemaine();
+  function texteCourses() {
+    const acc = listeCourses();
+    let out = "🛒 Liste de courses\n";
+    ORDRE_RAYONS.filter((r) => acc[r]).forEach((rayon) => {
+      out += `\n— ${rayon} —\n`;
+      Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom))
+        .forEach((it) => { out += `• ${fmtQte(it.unites)} ${it.nom}\n`; });
+    });
+    return out;
   }
 
   function renderRecettes() {
@@ -182,84 +250,143 @@
     const cats = [...new Set(RECIPES.map((r) => r.cat))];
     let html = `<input id="search" placeholder="🔍 Chercher une recette, un ingrédient…" />`;
     cats.forEach((cat) => {
-      html += `<h3 class="cat-title">${cat}</h3><div class="cards">`;
+      html += `<h3 class="cat-title">${esc(cat)}</h3><div class="cards">`;
       RECIPES.filter((r) => r.cat === cat).forEach((r) => {
-        html += `<div class="card recipe" data-search="${norm(r.nom + " " + r.ingr.join(" ") + " " + r.tags.join(" "))}">
-          <div class="plat">${r.nom}</div>
-          <div class="meta">${badge(fmtTemps(r.min))} ${badge(r.type)} ${badge(r.saison, "season")} ${r.tags.map((t) => badge(t, "tag")).join(" ")}</div>
-          <div class="ingr">${r.ingr.join(" · ")}</div>
+        const ex = estExclu(r);
+        html += `<div class="card recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
+          <div class="plat">${esc(r.nom)}${ex ? ` <span class="badge off">exclue</span>` : ""}</div>
+          <div class="temps">${tempsRecette(r)}</div>
+          <div class="meta">${(r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ")} ${badge(r.saison, "season")} ${(r.tags || []).map((t) => badge(t, "tag")).join(" ")}</div>
+          ${blocRecette(r)}
         </div>`;
       });
       html += `</div>`;
     });
     el.innerHTML = html;
-    const search = document.getElementById("search");
-    search.addEventListener("input", () => {
-      const q = norm(search.value);
-      el.querySelectorAll(".recipe").forEach((c) => {
-        c.style.display = c.dataset.search.includes(q) ? "" : "none";
-      });
+    const s = document.getElementById("search");
+    s.addEventListener("input", () => {
+      const q = norm(s.value);
+      el.querySelectorAll(".recipe").forEach((c) => { c.style.display = c.dataset.search.includes(q) ? "" : "none"; });
       el.querySelectorAll(".cat-title").forEach((t) => {
-        let n = t.nextElementSibling;
-        const visible = [...n.querySelectorAll(".recipe")].some((c) => c.style.display !== "none");
-        t.style.display = visible ? "" : "none";
+        const vis = [...t.nextElementSibling.querySelectorAll(".recipe")].some((c) => c.style.display !== "none");
+        t.style.display = vis ? "" : "none";
       });
     });
   }
 
-  function renderHistorique() {
-    const el = document.getElementById("view-historique");
-    const hist = state.historique.slice().sort((a, b) => b.num - a.num || JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour));
-    if (!hist.length) { el.innerHTML = `<p class="empty">Aucun repas enregistré. Marque des plats « fait » dans l'onglet Semaine.</p>`; return; }
-    let html = `<p class="hint">L'historique bloque une recette vue sur les 3 dernières semaines lors de la génération.</p><div class="hist-list">`;
-    hist.forEach((h, i) => {
-      html += `<div class="hist-row">
-        <span class="hs">S${h.num}</span><span class="hj">${h.jour}</span>
-        <span class="hn">${h.nom}</span>
-        <span class="stars" data-i="${i}">${[1, 2, 3, 4, 5].map((n) => `<span class="star ${h.note >= n ? "on" : ""}" data-n="${n}">★</span>`).join("")}</span>
-        <button data-act="del-hist" data-i="${i}">✕</button>
-      </div>`;
+  function renderReglages() {
+    const el = document.getElementById("view-reglages");
+    const nb = RECIPES.filter((r) => !estExclu(r)).length;
+    let html = `<h3 class="cat-title">Ingrédients exclus</h3>
+      <p class="hint">Une recette contenant un de ces ingrédients ne sera jamais proposée. ${nb}/${RECIPES.length} recettes disponibles.</p>
+      <div class="add-row">
+        <input id="new-ex" placeholder="Ex. : coriandre" />
+        <button id="btn-add-ex">Ajouter</button>
+      </div>
+      <div class="chips">`;
+    state.exclusions.forEach((e, i) => {
+      html += `<span class="chip">${esc(e)}<button data-act="unexclude" data-i="${i}" title="Retirer">✕</button></span>`;
     });
-    html += `</div>`;
+    html += `</div>
+      <h3 class="cat-title">Historique</h3>
+      <p class="hint">Les plats déjà cuisinés ne reviennent pas avant 3 semaines.</p>`;
+    if (!state.historique.length) html += `<p class="empty">Aucun plat enregistré.</p>`;
+    else {
+      html += `<div class="hist-list">`;
+      state.historique.slice().sort((a, b) => b.num - a.num).forEach((h) => {
+        html += `<div class="hist-row"><span class="hs">S${h.num}</span><span class="hn">${esc(h.nom)}</span>
+          <button data-act="del-hist" data-nom="${esc(h.nom)}" data-num="${h.num}">✕</button></div>`;
+      });
+      html += `</div>`;
+    }
+    html += `<h3 class="cat-title">Données</h3><button id="btn-reset" class="linkbtn danger">Tout réinitialiser</button>`;
     el.innerHTML = html;
-    el.querySelectorAll(".star").forEach((st) => st.addEventListener("click", (e) => {
-      const row = e.target.closest(".stars"); const i = +row.dataset.i; const n = +e.target.dataset.n;
-      const sorted = state.historique.slice().sort((a, b) => b.num - a.num || JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour));
-      const target = sorted[i];
-      const real = state.historique.find((x) => x.num === target.num && x.jour === target.jour && x.nom === target.nom);
-      real.note = real.note === n ? 0 : n;
-      saveState(state); renderHistorique();
-    }));
   }
 
   // ---------- navigation ----------
-  function show(view) {
-    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    document.getElementById("view-" + view).classList.add("active");
-    document.querySelector(`.tab[data-view="${view}"]`).classList.add("active");
-    if (view === "semaine") renderSemaine();
-    if (view === "recettes") renderRecettes();
-    if (view === "historique") renderHistorique();
+  const RENDER = { semaine: renderSemaine, courses: renderCourses, recettes: renderRecettes, reglages: renderReglages };
+  function show(v) {
+    document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+    document.getElementById("view-" + v).classList.add("active");
+    document.querySelector(`.tab[data-view="${v}"]`).classList.add("active");
+    RENDER[v]();
+    window.scrollTo(0, 0);
+  }
+  const vueActive = () => document.querySelector(".view.active").id.replace("view-", "");
+
+  /* Notification éphémère. L'auto-masquage est porté par une animation CSS
+     (classe .on -> keyframes toastlife), pas par un minuteur JS. */
+  function toast(msg) {
+    let t = document.getElementById("toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "toast";
+      t.addEventListener("animationend", () => t.classList.remove("on"));
+      document.body.appendChild(t);
+    }
+    t.classList.remove("on");
+    void t.offsetWidth; // relance l'animation
+    t.textContent = msg;
+    t.classList.add("on");
   }
 
-  // ---------- events (délégation) ----------
+  // ---------- events ----------
   document.addEventListener("click", (e) => {
     const t = e.target;
-    if (t.classList.contains("tab")) show(t.dataset.view);
-    if (t.id === "btn-gen") { genererSemaine(); renderSemaine(); }
+    if (t.classList.contains("tab")) return show(t.dataset.view);
+    if (t.id === "btn-gen") { generer(); return renderSemaine(); }
+    if (t.id === "btn-add-ex") {
+      const inp = document.getElementById("new-ex");
+      if (ajouterExclusion(inp.value)) { inp.value = ""; renderReglages(); toast("Ingrédient exclu"); }
+      else toast("Déjà dans la liste");
+      return;
+    }
+    if (t.id === "btn-copy") {
+      navigator.clipboard.writeText(texteCourses()).then(() => toast("Liste copiée")).catch(() => toast("Copie impossible"));
+      return;
+    }
+    if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save(); return renderCourses(); }
+    if (t.id === "btn-reset") {
+      if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), coursesCochees: {} };
+        save(); show("semaine");
+      }
+      return;
+    }
     const act = t.dataset.act;
-    if (act === "regen-day") regenJour(t.dataset.jour);
-    if (act === "done") marquerFait(t.dataset.jour, decodeURIComponent(t.dataset.nom));
+    if (act === "regen-day") { regenJour(t.dataset.jour); return renderSemaine(); }
+    if (act === "exclure") {
+      const ing = t.dataset.ing;
+      if (ajouterExclusion(ing)) {
+        // remplace les plats du menu devenus invalides
+        if (state.semaine) {
+          state.semaine.plan.slice().forEach((p) => { const r = getR(p.nom); if (r && estExclu(r)) regenJour(p.jour); });
+          save();
+        }
+        RENDER[vueActive()]();
+        toast(`« ${ing} » exclu — recettes remplacées`);
+      } else toast("Déjà dans les exclusions");
+      return;
+    }
+    if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "del-hist") {
-      const i = +t.dataset.i;
-      const sorted = state.historique.slice().sort((a, b) => b.num - a.num || JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour));
-      const target = sorted[i];
-      state.historique = state.historique.filter((x) => !(x.num === target.num && x.jour === target.jour && x.nom === target.nom));
-      saveState(state); renderHistorique();
+      state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && h.num === +t.dataset.num));
+      save(); return renderReglages();
     }
   });
 
-  // init
+  document.addEventListener("change", (e) => {
+    if (e.target.dataset.act === "course") {
+      const id = e.target.dataset.id;
+      if (e.target.checked) state.coursesCochees[id] = true; else delete state.coursesCochees[id];
+      save();
+      e.target.closest(".shop-row").classList.toggle("checked", e.target.checked);
+    }
+  });
+
+  // exposé pour les tests automatisés
+  window.__mims = { generer, listeCourses, estExclu, getState: () => state };
+
   document.addEventListener("DOMContentLoaded", () => show("semaine"));
 })();
