@@ -2,6 +2,11 @@
 
 App web mobile-first de planification de repas hebdomadaire (3 pers, 4 parts/plat), à partir d'une base de recettes curée et d'un cadre de règles nutritionnelles.
 
+## Déploiement
+- Repo : https://github.com/maxencebonnetcarrier-ship-it/recettes-des-mims (public)
+- Live (GitHub Pages, branche main / racine) : **https://maxencebonnetcarrier-ship-it.github.io/recettes-des-mims/**
+- Mettre à jour = `git push` sur main ; Pages rebuild automatiquement (~1 min).
+
 ## Stack
 - HTML/CSS/JS pur, mono-page, **zéro build**. Fonctionne en `file://` et sur GitHub Pages.
 - État persisté en `localStorage` (clé `mims_state_v1`).
