@@ -49,7 +49,22 @@
   if (!state.semaine) state.semaine = null;
   if (!state.historique) state.historique = [];
   if (!state.exclusions) state.exclusions = EXCLUS_DEFAUT.slice();
+  if (!state.promos) state.promos = [];        // ingrédients en promo cette semaine (priorité)
   if (!state.coursesCochees) state.coursesCochees = {};
+
+  const enPromo = (r) => state.promos.length &&
+    r.ingredients.some((i) => state.promos.some((p) => norm(i.nom).includes(norm(p))));
+  // saison spécifique (pas "toute l'année") correspondant au mois courant
+  function pleineSaison(r) {
+    const s = norm(r.saison);
+    return !!s && !s.includes("toute") && s.includes(saisonActuelle());
+  }
+
+  function ajouterPromo(mot) {
+    const m = (mot || "").trim();
+    if (!m || state.promos.some((e) => norm(e) === norm(m))) return false;
+    state.promos.push(m); save(); return true;
+  }
 
   const estExclu = (r) => r.ingredients.some((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))));
 
@@ -91,19 +106,28 @@
     plan.forEach((p, i) => { if (p && i !== idx) compteProt[p.proteine] = (compteProt[p.proteine] || 0) + 1; });
     const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
 
-    const paliers = [
-      (r) => r.proteine !== protPrec && r.proteine !== protSuiv && (compteProt[r.proteine] || 0) < 2 && !saveursVues.has(saveurDe(r)),
+    let pool = candidats(cadre, interdites);
+    if (!pool.length) pool = RECIPES.filter((r) => cadre.cats.includes(r.cat) && !estExclu(r));
+    if (!pool.length) return null;
+
+    // CONTRAINTES DURES (adjacence protéine, quota hebdo) : on relâche par paliers si besoin
+    const contraintes = [
       (r) => r.proteine !== protPrec && r.proteine !== protSuiv && (compteProt[r.proteine] || 0) < 2,
       (r) => r.proteine !== protPrec && r.proteine !== protSuiv,
       (r) => r.proteine !== protPrec,
+      () => true,
     ];
-    let pool = shuffle(candidats(cadre, interdites));
-    if (!pool.length) pool = shuffle(RECIPES.filter((r) => cadre.cats.includes(r.cat) && !estExclu(r)));
-    for (const test of paliers) {
-      const hit = pool.find(test);
-      if (hit) return hit;
-    }
-    return pool[0] || null;
+    let eligibles = pool;
+    for (const c of contraintes) { const f = pool.filter(c); if (f.length) { eligibles = f; break; } }
+
+    // PRÉFÉRENCES (n'excluent jamais, elles classent) : promo dominante > saison > saveur neuve > aléa.
+    // Score calculé UNE fois par recette (sinon Math.random() dans le comparateur = tri instable).
+    const scored = eligibles.map((r) => ({
+      r,
+      s: (enPromo(r) ? 100 : 0) + (pleineSaison(r) ? 10 : 0) + (!saveursVues.has(saveurDe(r)) ? 5 : 0) + Math.random(),
+    }));
+    scored.sort((a, b) => b.s - a.s);
+    return scored[0].r;
   }
 
   function generer() {
@@ -212,7 +236,7 @@
     const acc = listeCourses();
     const rayons = ORDRE_RAYONS.filter((r) => acc[r]).concat(Object.keys(acc).filter((r) => !ORDRE_RAYONS.includes(r)));
     if (!rayons.length) { el.innerHTML = `<p class="empty">Génère d'abord un menu dans l'onglet Semaine.</p>`; return; }
-    let n = 0, html = `<p class="hint">Calculée pour ${PARTS_CIBLE} parts par plat, à partir du menu de la semaine.</p>`;
+    let n = 0, html = `<p class="hint">Coche ce que tu as déjà. Les quantités sont dans chaque recette (onglet Semaine).</p>`;
     rayons.forEach((rayon) => {
       const items = Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom));
       html += `<h3 class="cat-title">${esc(rayon)}</h3><div class="shop-list">`;
@@ -222,7 +246,6 @@
         const ok = !!state.coursesCochees[id];
         html += `<label class="shop-row ${ok ? "checked" : ""}">
           <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
-          <span class="sq">${esc(fmtQte(it.unites))}</span>
           <span class="sn">${esc(it.nom)}</span>
           <span class="sp">${esc(it.plats.join(" · "))}</span>
         </label>`;
@@ -240,7 +263,7 @@
     ORDRE_RAYONS.filter((r) => acc[r]).forEach((rayon) => {
       out += `\n— ${rayon} —\n`;
       Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom))
-        .forEach((it) => { out += `• ${fmtQte(it.unites)} ${it.nom}\n`; });
+        .forEach((it) => { out += `• ${it.nom}\n`; });
     });
     return out;
   }
@@ -277,7 +300,18 @@
   function renderReglages() {
     const el = document.getElementById("view-reglages");
     const nb = RECIPES.filter((r) => !estExclu(r)).length;
-    let html = `<h3 class="cat-title">Ingrédients exclus</h3>
+    let html = `<h3 class="cat-title">Promos de la semaine</h3>
+      <p class="hint">Tape ce qui est en promo (ex : cabillaud, poulet). Le prochain menu généré privilégiera les recettes qui l'utilisent.</p>
+      <div class="add-row">
+        <input id="new-promo" placeholder="Ex. : cabillaud" />
+        <button id="btn-add-promo">Ajouter</button>
+      </div>
+      <div class="chips">`;
+    state.promos.forEach((e, i) => {
+      html += `<span class="chip promo">${esc(e)}<button data-act="unpromo" data-i="${i}" title="Retirer">✕</button></span>`;
+    });
+    html += `</div>
+      <h3 class="cat-title">Ingrédients exclus</h3>
       <p class="hint">Une recette contenant un de ces ingrédients ne sera jamais proposée. ${nb}/${RECIPES.length} recettes disponibles.</p>
       <div class="add-row">
         <input id="new-ex" placeholder="Ex. : coriandre" />
@@ -342,6 +376,12 @@
       else toast("Déjà dans la liste");
       return;
     }
+    if (t.id === "btn-add-promo") {
+      const inp = document.getElementById("new-promo");
+      if (ajouterPromo(inp.value)) { inp.value = ""; renderReglages(); toast("Promo ajoutée — régénère le menu"); }
+      else toast("Déjà dans la liste");
+      return;
+    }
     if (t.id === "btn-copy") {
       navigator.clipboard.writeText(texteCourses()).then(() => toast("Liste copiée")).catch(() => toast("Copie impossible"));
       return;
@@ -349,7 +389,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save(); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), coursesCochees: {} };
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], coursesCochees: {} };
         save(); show("semaine");
       }
       return;
@@ -370,6 +410,7 @@
       return;
     }
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save(); return renderReglages(); }
+    if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "del-hist") {
       state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && h.num === +t.dataset.num));
       save(); return renderReglages();
