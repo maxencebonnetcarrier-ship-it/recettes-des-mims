@@ -4,6 +4,20 @@
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
+  const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+  // styles de plat sélectionnables par jour
+  const STYLES = [
+    { id: "volaille", label: "🍗 Volaille", cats: ["Volaille"], maxMin: null },
+    { id: "porc", label: "🥓 Porc", cats: ["Porc"], maxMin: null },
+    { id: "poisson", label: "🐟 Poisson", cats: ["Poisson"], maxMin: null },
+    { id: "legumineuses", label: "🫘 Légumineuses / végé", cats: ["Légumineuses"], maxMin: null },
+    { id: "express", label: "⚡ Express (sport, ≤25 min)", cats: ["Rapide (sport)"], maxMin: 25 },
+    { id: "mijote", label: "🍲 Mijoté (j'ai le temps)", cats: ["Mijoté"], maxMin: null },
+    { id: "roti", label: "🔥 Rôti / four", cats: ["Rôti"], maxMin: null },
+    { id: "libre", label: "🎲 Peu importe", cats: ["Volaille", "Porc", "Poisson", "Légumineuses", "Rapide (sport)", "Mijoté", "Rôti"], maxMin: null },
+  ];
+  const STYLE = (id) => STYLES.find((s) => s.id === id) || STYLES[STYLES.length - 1];
+  const CADRE_JOURS_DEFAUT = ["volaille", "legumineuses", "porc", "poisson", "express", "mijote", "roti"];
   const ORDRE_RAYONS = ["Boucherie", "Poissonnerie", "Fruits & légumes", "Crèmerie", "Boulangerie", "Épicerie"];
 
   // ---------- utils ----------
@@ -58,10 +72,12 @@
       ? `${lun.getUTCDate()}–${dim.getUTCDate()} ${MOIS[dim.getUTCMonth()]}`
       : `${lun.getUTCDate()} ${MOIS[lun.getUTCMonth()]} – ${dim.getUTCDate()} ${MOIS[dim.getUTCMonth()]}`;
   }
-  // cadre actif selon le preset choisi
+  // cadre actif construit depuis le style choisi pour chaque jour
   function getCadre() {
-    const p = (window.CADRE_PRESETS || []).find((x) => x.id === state.cadreId);
-    return (p && p.cadre) || CADRE;
+    return (state.cadreJours || CADRE_JOURS_DEFAUT).map((id, i) => {
+      const st = STYLE(id);
+      return { jour: JOURS[i], cats: st.cats, maxMin: st.maxMin, note: st.label };
+    });
   }
 
   // ---------- state ----------
@@ -72,8 +88,9 @@
   if (!state.historique) state.historique = [];
   if (!state.exclusions) state.exclusions = EXCLUS_DEFAUT.slice();
   if (!state.promos) state.promos = [];        // ingrédients en promo cette semaine (priorité)
-  if (!state.cadreId) state.cadreId = "equilibre"; // preset de cadre choisi
+  if (!state.cadreJours) state.cadreJours = CADRE_JOURS_DEFAUT.slice(); // style choisi pour chaque jour
   if (!state.favoris) state.favoris = [];       // noms de recettes aimées (priorité à la génération)
+  if (!state.notes) state.notes = {};           // note /5 (demi-étoiles) par recette → priorité
   if (!state.envies) state.envies = [];         // plats que l'utilisateur veut voir scrapés plus tard
   if (!state.coursesCochees) state.coursesCochees = {};
 
@@ -164,7 +181,7 @@
     // Score calculé UNE fois par recette (sinon Math.random() dans le comparateur = tri instable).
     const scored = eligibles.map((r) => ({
       r,
-      s: (enPromo(r) ? 100 : 0) + (estFavori(r.nom) ? 30 : 0) + (pleineSaison(r) ? 10 : 0) + (!saveursVues.has(saveurDe(r)) ? 5 : 0) + Math.random(),
+      s: (enPromo(r) ? 100 : 0) + (estFavori(r.nom) ? 30 : 0) + (state.notes[r.nom] || 0) * 4 + (pleineSaison(r) ? 10 : 0) + (!saveursVues.has(saveurDe(r)) ? 5 : 0) + Math.random(),
     }));
     scored.sort((a, b) => b.s - a.s);
     return scored[0].r;
@@ -185,7 +202,7 @@
       const r = choisir(cadre[i], interdites, plan, i);
       if (r) plan[i] = { jour: cadre[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, i, plan) };
     }
-    state.semaine = { num, cadreId: state.cadreId, plan: plan.filter(Boolean) };
+    state.semaine = { num, plan: plan.filter(Boolean) };
     save();
     return state.semaine;
   }
@@ -243,6 +260,20 @@
   // ---------- rendu ----------
   const badge = (t, c) => `<span class="badge ${c || ""}">${esc(t)}</span>`;
 
+  const estFait = (num, jour) => state.historique.some((h) => h.num === num && h.jour === jour && h.fait);
+
+  // widget de note en DEMI-étoiles (0,5 à 5)
+  function etoiles(nom) {
+    const note = state.notes[nom] || 0;
+    let h = `<span class="stars">`;
+    for (let n = 1; n <= 5; n++) {
+      const cls = note >= n ? "full" : (note >= n - 0.5 ? "half" : "empty");
+      h += `<span class="star ${cls}">★<span class="hz l" data-act="note" data-nom="${esc(nom)}" data-val="${n - 0.5}"></span><span class="hz r" data-act="note" data-nom="${esc(nom)}" data-val="${n}"></span></span>`;
+    }
+    h += note ? ` <span class="note-val">${note}/5</span><button class="clr" data-act="note" data-nom="${esc(nom)}" data-val="0" title="Effacer">✕</button>` : "";
+    return h + `</span>`;
+  }
+
   // bulles d'une recette : modes de cuisson (dont air fryer)
   function bullesRecette(r) {
     let out = (r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ");
@@ -273,8 +304,7 @@
     const el = document.getElementById("view-semaine");
     if (!state.semaine || !state.semaine.plan.length) generer();
     const s = state.semaine;
-    const presetNom = ((window.CADRE_PRESETS || []).find((x) => x.id === state.cadreId) || {}).nom;
-    let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · ${esc(plageSemaine(s.num))} · ${PARTS_CIBLE} parts/plat${presetNom ? ` · <span class="cadre-tag">${esc(presetNom)}</span>` : ""}</div>
+    let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · ${esc(plageSemaine(s.num))} · ${PARTS_CIBLE} parts/plat</div>
       <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
     s.plan.forEach((p) => {
       const r = getR(p.nom);
@@ -291,7 +321,11 @@
         ${r.bonus ? `<div class="bonus">✨ Le p'tit plus : ${esc(r.bonus)}</div>` : ""}
         <div class="constraint">${esc(cadre ? cadre.note : "")}</div>
         ${blocRecette(r)}
-        <div class="actions"><button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer ce plat</button></div>
+        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>
+        <div class="actions">
+          <button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>
+          <button class="fait ${estFait(s.num, p.jour) ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${estFait(s.num, p.jour) ? "✓ Fait" : "Marquer fait"}</button>
+        </div>
       </div>`;
     });
     el.innerHTML = html + `</div>`;
@@ -369,15 +403,21 @@
   function renderReglages() {
     const el = document.getElementById("view-reglages");
     const nb = RECIPES.filter((r) => !estExclu(r)).length;
-    let html = `<h3 class="cat-title">Cadre de la semaine</h3>
-      <p class="hint">Choisis la trame de ta semaine. Le prochain menu généré s'y conforme.</p>
-      <div class="presets">`;
+    let html = `<h3 class="cat-title">Mon cadre — jour par jour</h3>
+      <p class="hint">Choisis le style de plat pour chaque jour (sport = express, plus de temps = mijoté…). Le menu se génère selon TES choix.</p>
+      <div class="jours-editor">`;
+    JOURS.forEach((j, i) => {
+      const cur = (state.cadreJours || CADRE_JOURS_DEFAUT)[i];
+      html += `<div class="jour-row"><span class="jour">${esc(j)}</span>
+        <select data-act="cadre-jour" data-i="${i}">
+          ${STYLES.map((s) => `<option value="${s.id}" ${s.id === cur ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
+        </select></div>`;
+    });
+    html += `</div>
+      <p class="hint">Ou pars d'un modèle tout fait :</p>
+      <div class="preset-quick">`;
     (window.CADRE_PRESETS || []).forEach((p) => {
-      const on = state.cadreId === p.id;
-      html += `<button class="preset ${on ? "on" : ""}" data-act="preset" data-id="${esc(p.id)}">
-        <span class="preset-nom">${esc(p.nom)}</span>
-        <span class="preset-desc">${esc(p.desc)}</span>
-      </button>`;
+      html += `<button class="preset-mini" data-act="preset" data-id="${esc(p.id)}">${esc(p.nom)}</button>`;
     });
     html += `</div>
       <h3 class="cat-title">Promos de la semaine</h3>
@@ -490,7 +530,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save(); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreId: "equilibre", favoris: [], envies: [], coursesCochees: {} };
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {} };
         save(); show("semaine");
       }
       return;
@@ -511,6 +551,22 @@
       return;
     }
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save(); return renderReglages(); }
+    if (act === "fait") {
+      const num = state.semaine.num, jour = t.dataset.jour, nom = t.dataset.nom;
+      const h = state.historique.find((x) => x.num === num && x.jour === jour);
+      if (h) { h.fait = !h.fait; h.nom = nom; }
+      else state.historique.push({ num, jour, nom, fait: true, note: state.notes[nom] || 0 });
+      save(); renderSemaine();
+      return;
+    }
+    if (act === "note") {
+      const nom = t.dataset.nom, val = parseFloat(t.dataset.val);
+      if (val > 0) state.notes[nom] = val; else delete state.notes[nom];
+      // répercute sur l'historique du plat
+      state.historique.forEach((h) => { if (h.nom === nom) h.note = val; });
+      save(); RENDER[vueActive()]();
+      return;
+    }
     if (act === "fav") {
       const nom = t.dataset.nom;
       if (estFavori(nom)) state.favoris = state.favoris.filter((x) => x !== nom);
@@ -529,9 +585,14 @@
     if (act === "del-envie") { state.envies.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "preset") {
-      const btn = t.closest(".preset");
-      state.cadreId = btn.dataset.id; generer(); save(); renderReglages();
-      toast("Cadre changé — menu régénéré"); return;
+      const p = (window.CADRE_PRESETS || []).find((x) => x.id === t.dataset.id);
+      if (p) {
+        const CAT2 = { "Volaille": "volaille", "Porc": "porc", "Poisson": "poisson", "Légumineuses": "legumineuses", "Rapide (sport)": "express", "Mijoté": "mijote", "Rôti": "roti" };
+        state.cadreJours = p.cadre.map((c) => CAT2[c.cats[0]] || "libre");
+        generer(); save(); renderReglages();
+        toast("Modèle appliqué — menu régénéré");
+      }
+      return;
     }
     if (act === "del-hist") {
       state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && h.num === +t.dataset.num));
@@ -540,6 +601,14 @@
   });
 
   document.addEventListener("change", (e) => {
+    if (e.target.dataset.act === "cadre-jour") {
+      const i = +e.target.dataset.i;
+      state.cadreJours = (state.cadreJours || CADRE_JOURS_DEFAUT).slice();
+      state.cadreJours[i] = e.target.value;
+      generer(); save(); renderReglages();
+      toast(JOURS[i] + " : " + STYLE(e.target.value).label);
+      return;
+    }
     if (e.target.dataset.act === "course") {
       const id = e.target.dataset.id;
       if (e.target.checked) state.coursesCochees[id] = true; else delete state.coursesCochees[id];
@@ -549,7 +618,7 @@
   });
 
   // exposé pour les tests automatisés
-  window.__mims = { generer, listeCourses, estExclu, getState: () => state };
+  window.__mims = { generer, listeCourses, estExclu, getCadre, getState: () => state };
 
   document.addEventListener("DOMContentLoaded", () => show("semaine"));
 })();

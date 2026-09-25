@@ -35,9 +35,10 @@
       if (r && window.__mims.estExclu(r)) res.echecs.push(`run ${k}: ${p.nom} est exclue mais proposée`);
     });
 
-    // RÈGLE : respect de la catégorie et du temps max du jour
+    // RÈGLE : respect de la catégorie et du temps max du jour — selon le cadre ACTIF
+    const cadreActif = window.__mims.getCadre();
     plan.forEach((p) => {
-      const cadre = window.CADRE.find((x) => x.jour === p.jour);
+      const cadre = cadreActif.find((x) => x.jour === p.jour);
       const r = window.RECIPES.find((x) => x.nom === p.nom);
       if (!r) { res.echecs.push(`run ${k}: recette introuvable ${p.nom}`); return; }
       if (!cadre.cats.includes(r.cat)) res.echecs.push(`run ${k}: ${p.jour} attend ${cadre.cats} mais a ${r.cat}`);

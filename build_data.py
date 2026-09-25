@@ -76,6 +76,35 @@ def norm(s):
     return "".join(c for c in s if unicodedata.category(c) != "Mn").strip()
 
 
+import re as _re
+# mentions de difficulté / marketing à retirer des titres
+_MENTIONS = [
+    "la meilleure recette", "recette originale", "tres facile", "rapide et facile",
+    "simple et rapide", "succulente et rapide", "tout simple et parfume",
+    "tout simple", "pour les nuls", "inratable", "succulente", "express",
+    "facile", "parfaite", "parfait", "originale", "simple",
+]
+
+
+def nettoyer_nom(nom):
+    """Retire les mentions de difficulté/marketing en fin (ou après virgule) de titre.
+    Les mentions ciblées sont ASCII → l'index dans la version dé-accentuée == index dans l'original."""
+    if not nom:
+        return nom
+    s = _re.sub(r"\s+", " ", nom).strip(" ,.-")
+    change = True
+    while change:
+        change = False
+        low = norm(s)  # même longueur que s (les suffixes ciblés sont ascii)
+        for m in _MENTIONS:
+            match = _re.search(r"[\s,]+(et\s+)?" + _re.escape(m) + r"$", low)
+            if match:
+                s = s[: match.start()].strip(" ,.-")
+                change = True
+                break
+    return s
+
+
 def charger(dossier):
     recettes, vus = [], set()
     for nom in sorted(os.listdir(dossier)):
@@ -84,6 +113,7 @@ def charger(dossier):
         with open(os.path.join(dossier, nom), encoding="utf-8") as f:
             lot = json.load(f)
         for r in lot:
+            r["nom"] = nettoyer_nom(r.get("nom", ""))
             cle = norm(r.get("nom", ""))
             if not cle or cle in vus:
                 continue
@@ -202,6 +232,7 @@ def charger_accompagnements(dossier):
         lot = json.load(f)
     out = []
     for a in lot:
+        a["nom"] = nettoyer_nom(a.get("nom", ""))
         if not a.get("url", "").startswith("http") or not a.get("ingredients"):
             continue
         for i in a["ingredients"]:
