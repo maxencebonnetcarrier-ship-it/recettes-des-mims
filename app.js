@@ -11,13 +11,16 @@
     { id: "porc", label: "🥓 Porc", cats: ["Porc"], maxMin: null },
     { id: "poisson", label: "🐟 Poisson", cats: ["Poisson"], maxMin: null },
     { id: "legumineuses", label: "🫘 Légumineuses / végé", cats: ["Légumineuses"], maxMin: null },
-    { id: "express", label: "⚡ Express (sport, ≤25 min)", cats: ["Rapide (sport)"], maxMin: 25 },
+    { id: "rapide", label: "⚡ Rapide (≤30 min)", cats: ["Volaille", "Porc", "Poisson", "Légumineuses", "Rapide (sport)"], maxMin: 30 },
+    { id: "sport", label: "💪 Rapide sport (protéiné, ≤30 min)", cats: ["Volaille", "Porc", "Poisson", "Rapide (sport)"], maxMin: 30, proteine: true },
     { id: "mijote", label: "🍲 Mijoté (j'ai le temps)", cats: ["Mijoté"], maxMin: null },
     { id: "roti", label: "🔥 Rôti / four", cats: ["Rôti"], maxMin: null },
     { id: "libre", label: "🎲 Peu importe", cats: ["Volaille", "Porc", "Poisson", "Légumineuses", "Rapide (sport)", "Mijoté", "Rôti"], maxMin: null },
   ];
   const STYLE = (id) => STYLES.find((s) => s.id === id) || STYLES[STYLES.length - 1];
-  const CADRE_JOURS_DEFAUT = ["volaille", "legumineuses", "porc", "poisson", "express", "mijote", "roti"];
+  const CADRE_JOURS_DEFAUT = ["volaille", "legumineuses", "porc", "poisson", "sport", "mijote", "roti"];
+  // protéines "riches" retenues par le style sport
+  const PROT_SPORT = new Set(["bœuf", "boeuf", "veau", "porc", "agneau", "volaille", "poisson"]);
   const ORDRE_RAYONS = ["Boucherie", "Poissonnerie", "Fruits & légumes", "Crèmerie", "Boulangerie", "Épicerie"];
 
   // ---------- utils ----------
@@ -76,7 +79,7 @@
   function getCadre() {
     return (state.cadreJours || CADRE_JOURS_DEFAUT).map((id, i) => {
       const st = STYLE(id);
-      return { jour: JOURS[i], cats: st.cats, maxMin: st.maxMin, note: st.label };
+      return { jour: JOURS[i], cats: st.cats, maxMin: st.maxMin, proteine: !!st.proteine, note: st.label };
     });
   }
 
@@ -145,6 +148,7 @@
     return RECIPES.filter((r) =>
       cadre.cats.includes(r.cat) &&
       (!cadre.maxMin || (r.total_min || 0) <= cadre.maxMin) &&
+      (!cadre.proteine || PROT_SPORT.has(norm(r.proteine))) &&
       deSaison(r) && !estExclu(r) && !interdites.has(r.nom)
     );
   }
@@ -352,6 +356,26 @@
       });
       html += `</div>`;
     });
+    // section optionnelle : les « p'tits plus » qui subliment les plats
+    const plus = [];
+    (state.semaine ? state.semaine.plan : []).forEach((p) => {
+      const r = getR(p.nom);
+      if (r && r.bonus) plus.push({ plat: r.nom, quoi: r.bonus });
+    });
+    if (plus.length) {
+      html += `<h3 class="cat-title">✨ Pour sublimer (optionnel)</h3>
+        <p class="hint">Pas indispensable — juste le petit truc en plus.</p><div class="shop-list">`;
+      plus.forEach((it) => {
+        const id = norm("plus|" + it.plat);
+        const ok = !!state.coursesCochees[id];
+        html += `<label class="shop-row optionnel ${ok ? "checked" : ""}">
+          <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
+          <span class="sn">${esc(it.quoi)}</span>
+          <span class="sp">${esc(it.plat)}</span>
+        </label>`;
+      });
+      html += `</div>`;
+    }
     html += `<button id="btn-copy" class="primary ghost">📋 Copier la liste</button>
       <button id="btn-reset-courses" class="linkbtn">Tout décocher</button>`;
     el.innerHTML = `<div class="week-head"><strong>${n} articles</strong></div>` + html;
@@ -365,6 +389,12 @@
       Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom))
         .forEach((it) => { out += `• ${it.nom}\n`; });
     });
+    const plus = (state.semaine ? state.semaine.plan : [])
+      .map((p) => getR(p.nom)).filter((r) => r && r.bonus);
+    if (plus.length) {
+      out += `\n— Pour sublimer (optionnel) —\n`;
+      plus.forEach((r) => { out += `• ${r.bonus} (${r.nom})\n`; });
+    }
     return out;
   }
 
@@ -398,6 +428,41 @@
         t.style.display = vis ? "" : "none";
       });
     });
+  }
+
+  function renderHistorique() {
+    const el = document.getElementById("view-historique");
+    const faits = state.historique.filter((h) => h.fait);
+    if (!faits.length) {
+      el.innerHTML = `<p class="empty">Aucun plat cuisiné pour l'instant.<br>Touche « Marquer fait » sur un plat de la semaine.</p>`;
+      return;
+    }
+    const notes = faits.map((h) => state.notes[h.nom] || 0).filter((n) => n > 0);
+    const moy = notes.length ? (notes.reduce((a, b) => a + b, 0) / notes.length).toFixed(1) : null;
+    let html = `<div class="week-head"><strong>${faits.length} plat${faits.length > 1 ? "s" : ""} cuisiné${faits.length > 1 ? "s" : ""}</strong>${moy ? ` · note moyenne ${moy}/5` : ""}</div>
+      <p class="hint">Un plat cuisiné ne revient pas avant 3 semaines. Les mieux notés reviennent en priorité.</p>`;
+    // groupé par semaine, plus récent d'abord
+    const parSem = {};
+    faits.forEach((h) => { (parSem[h.num] = parSem[h.num] || []).push(h); });
+    Object.keys(parSem).map(Number).sort((a, b) => b - a).forEach((num) => {
+      html += `<h3 class="cat-title">Semaine ${num} · ${esc(plageSemaine(num))}</h3><div class="cards">`;
+      parSem[num].sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)).forEach((h) => {
+        const r = getR(h.nom);
+        html += `<div class="card hist">
+          <div class="card-top"><span class="jour">${esc(h.jour)}</span>
+            <button class="fav ${estFavori(h.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(h.nom)}" title="J'aime">${estFavori(h.nom) ? "❤️" : "🤍"}</button>
+          </div>
+          <div class="plat">${esc(h.nom)}</div>
+          <div class="note-row">Ta note : ${etoiles(h.nom)}</div>
+          <div class="actions">
+            ${r && r.url ? `<a class="btn-link" href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette ↗</a>` : ""}
+            <button data-act="del-hist" data-nom="${esc(h.nom)}" data-num="${h.num}">Retirer</button>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    el.innerHTML = html;
   }
 
   function renderReglages() {
@@ -463,23 +528,14 @@
       html += `<span class="chip envie">${esc(e)}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     html += `</div>
-      <h3 class="cat-title">Historique</h3>
-      <p class="hint">Les plats déjà cuisinés ne reviennent pas avant 3 semaines.</p>`;
-    if (!state.historique.length) html += `<p class="empty">Aucun plat enregistré.</p>`;
-    else {
-      html += `<div class="hist-list">`;
-      state.historique.slice().sort((a, b) => b.num - a.num).forEach((h) => {
-        html += `<div class="hist-row"><span class="hs">S${h.num}</span><span class="hn">${esc(h.nom)}</span>
-          <button data-act="del-hist" data-nom="${esc(h.nom)}" data-num="${h.num}">✕</button></div>`;
-      });
-      html += `</div>`;
-    }
-    html += `<h3 class="cat-title">Données</h3><button id="btn-reset" class="linkbtn danger">Tout réinitialiser</button>`;
+      <h3 class="cat-title">Données</h3>
+      <p class="hint">L'historique de tes plats cuisinés est dans l'onglet 🕑 Historique.</p>
+      <button id="btn-reset" class="linkbtn danger">Tout réinitialiser</button>`;
     el.innerHTML = html;
   }
 
   // ---------- navigation ----------
-  const RENDER = { semaine: renderSemaine, courses: renderCourses, recettes: renderRecettes, reglages: renderReglages };
+  const RENDER = { semaine: renderSemaine, courses: renderCourses, recettes: renderRecettes, historique: renderHistorique, reglages: renderReglages };
   function show(v) {
     document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
     document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
@@ -561,9 +617,12 @@
     }
     if (act === "note") {
       const nom = t.dataset.nom, val = parseFloat(t.dataset.val);
-      if (val > 0) state.notes[nom] = val; else delete state.notes[nom];
-      // répercute sur l'historique du plat
-      state.historique.forEach((h) => { if (h.nom === nom) h.note = val; });
+      // re-cliquer la MÊME valeur efface la note (utile si clic par erreur)
+      if (val > 0 && state.notes[nom] !== val) state.notes[nom] = val;
+      else delete state.notes[nom];
+      // répercute sur l'historique du plat (0 si la note vient d'être effacée)
+      const nouvelle = state.notes[nom] || 0;
+      state.historique.forEach((h) => { if (h.nom === nom) h.note = nouvelle; });
       save(); RENDER[vueActive()]();
       return;
     }

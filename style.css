@@ -152,8 +152,13 @@ button.x:active { background: #c0532f; color: #fff; border-color: #c0532f; }
 
 /* tabbar */
 .tabbar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-.tab { flex: 1; border: none; background: none; color: var(--muted); cursor: pointer; padding: 9px 4px 11px; font-size: 1.25rem; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.tab span { font-size: .66rem; font-weight: 600; }
+.tab { flex: 1 1 0; min-width: 0; border: none; background: none; color: var(--muted); cursor: pointer; padding: 8px 1px 10px; font-size: 1.1rem; display: flex; flex-direction: column; align-items: center; gap: 1px; overflow: hidden; }
+.tab span { font-size: .58rem; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* courses : section optionnelle */
+.shop-row.optionnel { border-style: dashed; }
+.shop-row.optionnel .sn { font-style: italic; }
+.btn-link { flex: 1; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: .85rem; font-weight: 600; text-align: center; text-decoration: none; }
+.card.hist .note-row { margin-top: 4px; }
 .tab.active { color: var(--accent); }
 
 /* toast — durée de vie portée par l'animation, pas par un minuteur JS */
