@@ -51,6 +51,18 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .badge.tag { background: transparent; border: 1px dashed var(--muted); color: var(--muted); }
 .badge.season { background: transparent; color: var(--muted); border: 1px solid var(--line); }
 .badge.off { background: #c0532f; color: #fff; }
+.badge.airfryer { background: transparent; border: 1px solid #d08a2e; color: #d08a2e; }
+.badge.nutri { background: #eef4ea; color: #4a7a3a; border: none; }
+@media (prefers-color-scheme: dark) { .badge.nutri { background: #29331f; color: #9cc98a; } }
+.morceau { font-size: .9rem; font-weight: 600; color: #a44; margin-bottom: 6px; }
+@media (prefers-color-scheme: dark) { .morceau { color: #e59; } }
+.cadre-tag { background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.presets { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.preset { text-align: left; background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+.preset.on { border-color: var(--accent); background: var(--accent-soft); }
+.preset-nom { font-weight: 700; color: var(--ink); font-size: .95rem; }
+.preset.on .preset-nom { color: var(--accent); }
+.preset-desc { font-size: .8rem; color: var(--muted); }
 .constraint { color: var(--muted); font-size: .8rem; font-style: italic; margin-bottom: 8px; }
 .actions { display: flex; gap: 8px; margin-top: 10px; }
 .actions button { flex: 1; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: .85rem; font-weight: 600; cursor: pointer; }

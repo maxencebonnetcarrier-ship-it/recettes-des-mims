@@ -41,6 +41,28 @@
     const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil((((d - y) / 86400000) + 1) / 7);
   }
+  // Lundi de la semaine ISO donnée (année courante par défaut)
+  function lundiSemaineISO(num, annee) {
+    const jan4 = new Date(Date.UTC(annee, 0, 4));
+    const j = jan4.getUTCDay() || 7;
+    const lundiS1 = new Date(jan4); lundiS1.setUTCDate(jan4.getUTCDate() - j + 1);
+    const lundi = new Date(lundiS1); lundi.setUTCDate(lundiS1.getUTCDate() + (num - 1) * 7);
+    return lundi;
+  }
+  const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+  function plageSemaine(num) {
+    const lun = lundiSemaineISO(num, new Date().getFullYear());
+    const dim = new Date(lun); dim.setUTCDate(lun.getUTCDate() + 6);
+    const mSame = lun.getUTCMonth() === dim.getUTCMonth();
+    return mSame
+      ? `${lun.getUTCDate()}–${dim.getUTCDate()} ${MOIS[dim.getUTCMonth()]}`
+      : `${lun.getUTCDate()} ${MOIS[lun.getUTCMonth()]} – ${dim.getUTCDate()} ${MOIS[dim.getUTCMonth()]}`;
+  }
+  // cadre actif selon le preset choisi
+  function getCadre() {
+    const p = (window.CADRE_PRESETS || []).find((x) => x.id === state.cadreId);
+    return (p && p.cadre) || CADRE;
+  }
 
   // ---------- state ----------
   function load() { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; } }
@@ -50,6 +72,7 @@
   if (!state.historique) state.historique = [];
   if (!state.exclusions) state.exclusions = EXCLUS_DEFAUT.slice();
   if (!state.promos) state.promos = [];        // ingrédients en promo cette semaine (priorité)
+  if (!state.cadreId) state.cadreId = "equilibre"; // preset de cadre choisi
   if (!state.coursesCochees) state.coursesCochees = {};
 
   const enPromo = (r) => state.promos.length &&
@@ -132,15 +155,20 @@
 
   function generer() {
     const num = numSemaineISO(new Date());
+    const cadre = getCadre();
     const interdites = recentes(num - 1);
-    const plan = new Array(CADRE.length).fill(null);
-    // jours les plus contraints d'abord (moins de candidats disponibles)
-    const ordre = CADRE.map((c, i) => ({ i, n: candidats(c, interdites).length })).sort((a, b) => a.n - b.n).map((o) => o.i);
+    const plan = new Array(cadre.length).fill(null);
+    // jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
+    // pour que les jours souples (Express, Mijoté) s'adaptent ensuite et évitent l'adjacence.
+    const ordre = cadre.map((c, i) => {
+      const cand = candidats(c, interdites);
+      return { i, prot: new Set(cand.map((r) => r.proteine)).size || 99, n: cand.length };
+    }).sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
     for (const i of ordre) {
-      const r = choisir(CADRE[i], interdites, plan, i);
-      if (r) plan[i] = { jour: CADRE[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r) };
+      const r = choisir(cadre[i], interdites, plan, i);
+      if (r) plan[i] = { jour: cadre[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r) };
     }
-    state.semaine = { num, plan: plan.filter(Boolean) };
+    state.semaine = { num, cadreId: state.cadreId, plan: plan.filter(Boolean) };
     save();
     return state.semaine;
   }
@@ -149,7 +177,7 @@
     const s = state.semaine;
     const idx = s.plan.findIndex((p) => p.jour === jour);
     if (idx < 0) return;
-    const cadre = CADRE.find((c) => c.jour === jour);
+    const cadre = getCadre().find((c) => c.jour === jour);
     const interdites = recentes(s.num - 1);
     s.plan.forEach((p, i) => { if (i !== idx) interdites.add(p.nom); });
     const copie = s.plan.slice(); copie[idx] = null;
@@ -189,6 +217,14 @@
   // ---------- rendu ----------
   const badge = (t, c) => `<span class="badge ${c || ""}">${esc(t)}</span>`;
 
+  // bulles d'une recette : cuissons (dont air fryer) + nutrition
+  function bullesRecette(r) {
+    let out = (r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ");
+    if (r.air_fryer) out += " " + badge("🍟 air fryer", "airfryer");
+    out += " " + (r.nutrition || []).map((n) => badge(n, "nutri")).join(" ");
+    return out;
+  }
+
   function blocRecette(r) {
     const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
     const ingr = r.ingredients.map((i) => {
@@ -212,17 +248,19 @@
     const el = document.getElementById("view-semaine");
     if (!state.semaine || !state.semaine.plan.length) generer();
     const s = state.semaine;
-    let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · 3 personnes · ${PARTS_CIBLE} parts par plat</div>
+    const presetNom = ((window.CADRE_PRESETS || []).find((x) => x.id === state.cadreId) || {}).nom;
+    let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · ${esc(plageSemaine(s.num))} · ${PARTS_CIBLE} parts/plat${presetNom ? ` · <span class="cadre-tag">${esc(presetNom)}</span>` : ""}</div>
       <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
     s.plan.forEach((p) => {
       const r = getR(p.nom);
       if (!r) return;
-      const cadre = CADRE.find((c) => c.jour === p.jour);
+      const cadre = getCadre().find((c) => c.jour === p.jour);
       html += `<div class="card day">
         <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span></div>
         <div class="plat">${esc(r.nom)}</div>
+        ${r.morceau ? `<div class="morceau">🥩 ${esc(r.morceau)}</div>` : ""}
         <div class="temps">${tempsRecette(r)}</div>
-        <div class="meta">${(r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ")} ${(r.tags || []).map((t) => badge(t, "tag")).join(" ")}</div>
+        <div class="meta">${bullesRecette(r)}</div>
         <div class="constraint">${esc(cadre ? cadre.note : "")}</div>
         ${blocRecette(r)}
         <div class="actions"><button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer ce plat</button></div>
@@ -276,10 +314,11 @@
       html += `<h3 class="cat-title">${esc(cat)}</h3><div class="cards">`;
       RECIPES.filter((r) => r.cat === cat).forEach((r) => {
         const ex = estExclu(r);
-        html += `<div class="card recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
+        html += `<div class="card recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + (r.morceau || "") + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
           <div class="plat">${esc(r.nom)}${ex ? ` <span class="badge off">exclue</span>` : ""}</div>
+          ${r.morceau ? `<div class="morceau">🥩 ${esc(r.morceau)}</div>` : ""}
           <div class="temps">${tempsRecette(r)}</div>
-          <div class="meta">${(r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ")} ${badge(r.saison, "season")} ${(r.tags || []).map((t) => badge(t, "tag")).join(" ")}</div>
+          <div class="meta">${bullesRecette(r)} ${badge(r.saison, "season")}</div>
           ${blocRecette(r)}
         </div>`;
       });
@@ -300,7 +339,18 @@
   function renderReglages() {
     const el = document.getElementById("view-reglages");
     const nb = RECIPES.filter((r) => !estExclu(r)).length;
-    let html = `<h3 class="cat-title">Promos de la semaine</h3>
+    let html = `<h3 class="cat-title">Cadre de la semaine</h3>
+      <p class="hint">Choisis la trame de ta semaine. Le prochain menu généré s'y conforme.</p>
+      <div class="presets">`;
+    (window.CADRE_PRESETS || []).forEach((p) => {
+      const on = state.cadreId === p.id;
+      html += `<button class="preset ${on ? "on" : ""}" data-act="preset" data-id="${esc(p.id)}">
+        <span class="preset-nom">${esc(p.nom)}</span>
+        <span class="preset-desc">${esc(p.desc)}</span>
+      </button>`;
+    });
+    html += `</div>
+      <h3 class="cat-title">Promos de la semaine</h3>
       <p class="hint">Tape ce qui est en promo (ex : cabillaud, poulet). Le prochain menu généré privilégiera les recettes qui l'utilisent.</p>
       <div class="add-row">
         <input id="new-promo" placeholder="Ex. : cabillaud" />
@@ -389,7 +439,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save(); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], coursesCochees: {} };
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreId: "equilibre", coursesCochees: {} };
         save(); show("semaine");
       }
       return;
@@ -411,6 +461,11 @@
     }
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save(); return renderReglages(); }
+    if (act === "preset") {
+      const btn = t.closest(".preset");
+      state.cadreId = btn.dataset.id; generer(); save(); renderReglages();
+      toast("Cadre changé — menu régénéré"); return;
+    }
     if (act === "del-hist") {
       state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && h.num === +t.dataset.num));
       save(); return renderReglages();

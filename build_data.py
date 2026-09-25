@@ -18,6 +18,54 @@ CADRE = [
     {"jour": "Dim", "cats": ["Mijoté", "Rôti"], "maxMin": None, "note": "Mijoté ou rôti du dimanche"},
 ]
 
+# Préréglages de cadre sélectionnables dans l'app (le 1er = défaut)
+CADRE_PRESETS = [
+    {
+        "id": "equilibre", "nom": "Équilibré (défaut)",
+        "desc": "Une catégorie par jour, poisson le jeudi, mijoté le week-end.",
+        "cadre": CADRE,
+    },
+    {
+        "id": "rapide", "nom": "Rapide tous les soirs",
+        "desc": "Tout ≤ 30 min : semaine chargée, zéro plat long.",
+        "cadre": [
+            {"jour": "Lun", "cats": ["Volaille"], "maxMin": 30, "note": "Volaille express"},
+            {"jour": "Mar", "cats": ["Légumineuses"], "maxMin": 30, "note": "Légumineuses express"},
+            {"jour": "Mer", "cats": ["Porc"], "maxMin": 30, "note": "Porc express"},
+            {"jour": "Jeu", "cats": ["Poisson"], "maxMin": 30, "note": "Poisson express"},
+            {"jour": "Ven", "cats": ["Rapide (sport)"], "maxMin": 25, "note": "Express protéiné"},
+            {"jour": "Sam", "cats": ["Rapide (sport)", "Volaille"], "maxMin": 35, "note": "Rapide"},
+            {"jour": "Dim", "cats": ["Rôti", "Volaille"], "maxMin": None, "note": "Rôti tranquille"},
+        ],
+    },
+    {
+        "id": "vege", "nom": "Plus de végé",
+        "desc": "Trois jours légumineuses/végé, moins de viande.",
+        "cadre": [
+            {"jour": "Lun", "cats": ["Légumineuses"], "maxMin": None, "note": "Légumineuses / végé"},
+            {"jour": "Mar", "cats": ["Poisson"], "maxMin": None, "note": "Poisson"},
+            {"jour": "Mer", "cats": ["Légumineuses"], "maxMin": None, "note": "Légumineuses / végé"},
+            {"jour": "Jeu", "cats": ["Volaille"], "maxMin": 35, "note": "Volaille"},
+            {"jour": "Ven", "cats": ["Rapide (sport)"], "maxMin": 25, "note": "Express"},
+            {"jour": "Sam", "cats": ["Légumineuses", "Poisson"], "maxMin": None, "note": "Légumineuses ou poisson"},
+            {"jour": "Dim", "cats": ["Mijoté", "Rôti"], "maxMin": None, "note": "Mijoté ou rôti"},
+        ],
+    },
+    {
+        "id": "sportif", "nom": "Sportif protéiné",
+        "desc": "Priorité viande et poisson, riche en protéines.",
+        "cadre": [
+            {"jour": "Lun", "cats": ["Rapide (sport)"], "maxMin": 25, "note": "Express protéiné"},
+            {"jour": "Mar", "cats": ["Volaille"], "maxMin": 35, "note": "Volaille"},
+            {"jour": "Mer", "cats": ["Porc"], "maxMin": 35, "note": "Porc"},
+            {"jour": "Jeu", "cats": ["Poisson"], "maxMin": None, "note": "Poisson"},
+            {"jour": "Ven", "cats": ["Rapide (sport)"], "maxMin": 25, "note": "Express protéiné"},
+            {"jour": "Sam", "cats": ["Mijoté", "Rôti"], "maxMin": None, "note": "Viande mijotée / rôtie"},
+            {"jour": "Dim", "cats": ["Rôti", "Mijoté"], "maxMin": None, "note": "Rôti du dimanche"},
+        ],
+    },
+]
+
 EXCLUS_DEFAUT = ["abats", "tomate", "champignon", "sucré-salé"]
 SAVEURS = ["moutarde", "cidre", "curry", "coco", "vin rouge", "vin blanc", "citron confit", "soja"]
 RAYONS = {"Boucherie", "Poissonnerie", "Fruits & légumes", "Crèmerie", "Boulangerie", "Épicerie"}
@@ -42,6 +90,55 @@ def charger(dossier):
             vus.add(cle)
             recettes.append(r)
     return recettes
+
+
+VIANDES = {"bœuf", "boeuf", "veau", "porc", "agneau", "volaille"}
+# mots indiquant un plat réconfortant / riche
+RICHE = ["crème", "creme", "lardons", "purée", "puree", "gratin", "beurre", "fromage", "chapelure"]
+
+
+def enrichir(r):
+    """Ajoute morceau (angle boucher), bulles nutrition, et flag air fryer."""
+    ingr = r["ingredients"]
+    prot = norm(r.get("proteine", ""))
+
+    # morceau de viande : ingrédient principal du rayon Boucherie
+    morceau = None
+    if prot in {norm(v) for v in VIANDES}:
+        bouch = [i for i in ingr if i.get("rayon") == "Boucherie"]
+        if bouch:
+            # le plus « lourd » d'abord (souvent la pièce principale)
+            bouch.sort(key=lambda i: -(i.get("qte") or 0))
+            morceau = bouch[0]["nom"]
+    r["morceau"] = morceau
+
+    # bulles nutrition (max 2, ordre de priorité)
+    txt = norm(" ".join(i.get("nom", "") for i in ingr))
+    a_legume = any(i.get("rayon") == "Fruits & légumes" for i in ingr)
+    riche = any(m in txt for m in (norm(x) for x in RICHE))
+    tags = [norm(t) for t in r.get("tags", [])]
+    bulles = []
+    if "poisson gras" in tags:
+        bulles.append("oméga-3")
+    if r.get("cat") in ("Mijoté", "Rôti") or (riche and r.get("cat") != "Poisson"):
+        bulles.append("réconfortant")
+    if "maigre" in tags or prot in {"poisson", "vege", "végé"} or (prot == "vege"):
+        bulles.append("léger")
+    if prot in {norm(v) for v in VIANDES} or prot == "poisson":
+        bulles.append("protéiné")
+    if a_legume and (prot in {norm(v) for v in VIANDES} or prot in {"poisson", "vege"}):
+        bulles.append("équilibré")
+    # dédoublonne en gardant l'ordre, cap à 2
+    seen, out = set(), []
+    for b in bulles:
+        if b not in seen:
+            seen.add(b); out.append(b)
+    r["nutrition"] = out[:2]
+
+    # air fryer : les plats au four sont adaptables air fryer
+    cu = [norm(c) for c in r.get("cuissons", [])]
+    r["air_fryer"] = ("four" in cu) or ("air fryer" in cu)
+    return r
 
 
 def valider(recettes):
@@ -79,7 +176,7 @@ def valider(recettes):
         r.setdefault("saison", "Toute l'année")
         if not r.get("total_min"):
             r["total_min"] = (r.get("prep_min") or 0) + (r.get("cuisson_min") or 0)
-        ok.append(r)
+        ok.append(enrichir(r))
     return ok, pbs
 
 
@@ -95,8 +192,11 @@ def ecrire(recettes, chemin):
     lignes += [
         "];",
         "",
-        "/* Contrainte par jour de la semaine */",
+        "/* Contrainte par jour (cadre par défaut = 1er preset) */",
         "window.CADRE = " + json.dumps(CADRE, ensure_ascii=False, indent=2) + ";",
+        "",
+        "/* Préréglages de cadre sélectionnables dans Réglages */",
+        "window.CADRE_PRESETS = " + json.dumps(CADRE_PRESETS, ensure_ascii=False) + ";",
         "",
         "/* Ingrédients exclus par défaut (l'utilisateur peut en ajouter dans Réglages) */",
         "window.EXCLUS_DEFAUT = " + j(EXCLUS_DEFAUT) + ";",
