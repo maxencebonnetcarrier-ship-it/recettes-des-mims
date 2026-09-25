@@ -97,6 +97,39 @@ VIANDES = {"bœuf", "boeuf", "veau", "porc", "agneau", "volaille"}
 RICHE = ["crème", "creme", "lardons", "purée", "puree", "gratin", "beurre", "fromage", "chapelure"]
 
 
+# « Le p'tit plus » : ingrédient bonus concret à rajouter, par protéine puis catégorie.
+PLUS_PAR_PROTEINE = {
+    "boeuf": ["un beurre maison aux herbes", "quelques oignons frits", "une pointe de poivre concassé"],
+    "bœuf": ["un beurre maison aux herbes", "quelques oignons frits", "une pointe de poivre concassé"],
+    "veau": ["un trait de crème et de l'estragon", "des câpres poêlées", "un zeste de citron"],
+    "porc": ["quelques cornichons", "de la moutarde à l'ancienne", "des oignons caramélisés"],
+    "agneau": ["un yaourt à la menthe", "de l'ail confit", "quelques olives"],
+    "volaille": ["des amandes effilées grillées", "un trait de crème", "des herbes fraîches"],
+    "poisson": ["un filet de citron", "un peu d'aneth frais", "une noisette de beurre citronné"],
+    "vege": ["de la feta émiettée", "un œuf poché", "des graines torréfiées"],
+    "végé": ["de la feta émiettée", "un œuf poché", "des graines torréfiées"],
+}
+PLUS_PAR_CAT = {
+    "Mijoté": ["des lardons fumés", "une gremolata (persil-ail-citron)"],
+    "Rôti": ["un jus déglacé au vin blanc", "de l'ail en chemise"],
+    "Légumineuses": ["un filet d'huile d'olive et du cumin", "de la coriandre fraîche"],
+}
+
+
+def petit_plus(r, prot):
+    import hashlib
+    cle = norm(r.get("nom", ""))
+    h = int(hashlib.md5(cle.encode("utf-8")).hexdigest(), 16)
+    cat = r.get("cat")
+    # override par catégorie (ex: lardons pour un mijoté) seulement si compatible avec la protéine
+    cat_ok = cat in PLUS_PAR_CAT and prot in {"boeuf", "bœuf", "veau", "volaille", "porc"} and cat != "Légumineuses"
+    if cat_ok and (h % 2 == 0):
+        opts = PLUS_PAR_CAT[cat]
+    else:
+        opts = PLUS_PAR_PROTEINE.get(prot) or PLUS_PAR_PROTEINE.get(norm(prot)) or ["un filet d'huile d'olive et des herbes"]
+    return opts[h % len(opts)]
+
+
 def enrichir(r):
     """Ajoute morceau (angle boucher), bulles nutrition, et flag air fryer."""
     ingr = r["ingredients"]
@@ -112,28 +145,8 @@ def enrichir(r):
             morceau = bouch[0]["nom"]
     r["morceau"] = morceau
 
-    # bulles nutrition (max 2, ordre de priorité)
-    txt = norm(" ".join(i.get("nom", "") for i in ingr))
-    a_legume = any(i.get("rayon") == "Fruits & légumes" for i in ingr)
-    riche = any(m in txt for m in (norm(x) for x in RICHE))
-    tags = [norm(t) for t in r.get("tags", [])]
-    bulles = []
-    if "poisson gras" in tags:
-        bulles.append("oméga-3")
-    if r.get("cat") in ("Mijoté", "Rôti") or (riche and r.get("cat") != "Poisson"):
-        bulles.append("réconfortant")
-    if "maigre" in tags or prot in {"poisson", "vege", "végé"} or (prot == "vege"):
-        bulles.append("léger")
-    if prot in {norm(v) for v in VIANDES} or prot == "poisson":
-        bulles.append("protéiné")
-    if a_legume and (prot in {norm(v) for v in VIANDES} or prot in {"poisson", "vege"}):
-        bulles.append("équilibré")
-    # dédoublonne en gardant l'ordre, cap à 2
-    seen, out = set(), []
-    for b in bulles:
-        if b not in seen:
-            seen.add(b); out.append(b)
-    r["nutrition"] = out[:2]
+    # « le p'tit plus » : un ingrédient bonus concret à rajouter, adapté au plat.
+    r["bonus"] = petit_plus(r, prot)
 
     # air fryer : les plats au four sont adaptables air fryer
     cu = [norm(c) for c in r.get("cuissons", [])]
@@ -180,7 +193,27 @@ def valider(recettes):
     return ok, pbs
 
 
-def ecrire(recettes, chemin):
+def charger_accompagnements(dossier):
+    """Charge accompagnements.json (facultatif), valide URL + ingrédients."""
+    chemin = os.path.join(dossier, "accompagnements.json")
+    if not os.path.exists(chemin):
+        return []
+    with open(chemin, encoding="utf-8") as f:
+        lot = json.load(f)
+    out = []
+    for a in lot:
+        if not a.get("url", "").startswith("http") or not a.get("ingredients"):
+            continue
+        for i in a["ingredients"]:
+            if i.get("rayon") not in RAYONS:
+                i["rayon"] = "Épicerie"
+        a.setdefault("suits", ["Volaille", "Porc", "Poisson", "Rapide (sport)", "Mijoté", "Rôti"])
+        a.setdefault("parts_origine", 4)
+        out.append(a)
+    return out
+
+
+def ecrire(recettes, accompagnements, chemin):
     j = lambda o: json.dumps(o, ensure_ascii=False)
     lignes = [
         "/* Base de recettes — SCRAPÉE depuis Marmiton / Saveurs / Journal des Femmes.",
@@ -203,6 +236,11 @@ def ecrire(recettes, chemin):
         "",
         "/* Saveurs dominantes — évite deux plats de même saveur dans la semaine */",
         "window.SAVEURS = " + j(SAVEURS) + ";",
+        "",
+        "/* Accompagnements scrapés (l'app en pioche un, variable, par plat) */",
+        "window.ACCOMPAGNEMENTS = [",
+    ] + ["  " + j(a) + "," for a in accompagnements] + [
+        "];",
         "",
     ]
     with open(chemin, "w", encoding="utf-8") as f:
@@ -234,8 +272,10 @@ def main():
     if manques:
         print(f"\nATTENTION : jours avec moins de 2 candidats : {', '.join(manques)}")
 
-    ecrire(recettes, sortie)
-    print(f"\nÉcrit : {sortie}")
+    accs = charger_accompagnements(dossier)
+    print(f"\nAccompagnements : {len(accs)}")
+    ecrire(recettes, accs, sortie)
+    print(f"Écrit : {sortie}")
 
 
 if __name__ == "__main__":

@@ -73,7 +73,24 @@
   if (!state.exclusions) state.exclusions = EXCLUS_DEFAUT.slice();
   if (!state.promos) state.promos = [];        // ingrédients en promo cette semaine (priorité)
   if (!state.cadreId) state.cadreId = "equilibre"; // preset de cadre choisi
+  if (!state.favoris) state.favoris = [];       // noms de recettes aimées (priorité à la génération)
+  if (!state.envies) state.envies = [];         // plats que l'utilisateur veut voir scrapés plus tard
   if (!state.coursesCochees) state.coursesCochees = {};
+
+  const estFavori = (nom) => state.favoris.includes(nom);
+  const ACC = () => window.ACCOMPAGNEMENTS || [];
+  // accompagnement qui VARIE : choisi au hasard parmi ceux adaptés à la catégorie du plat
+  function pickSide(r, idx, plan) {
+    const compat = ACC().filter((a) => (a.suits || []).includes(r.cat));
+    const pool = compat.length ? compat : ACC();
+    if (!pool.length) return null;
+    // évite de répéter le même accompagnement qu'un autre jour déjà servi
+    const dejaVus = new Set((plan || []).filter(Boolean).map((p) => p && p.side && p.side.nom));
+    const libres = pool.filter((a) => !dejaVus.has(a.nom));
+    const choix = (libres.length ? libres : pool);
+    const a = choix[Math.floor(Math.random() * choix.length)];
+    return { nom: a.nom, url: a.url, source: a.source };
+  }
 
   const enPromo = (r) => state.promos.length &&
     r.ingredients.some((i) => state.promos.some((p) => norm(i.nom).includes(norm(p))));
@@ -147,7 +164,7 @@
     // Score calculé UNE fois par recette (sinon Math.random() dans le comparateur = tri instable).
     const scored = eligibles.map((r) => ({
       r,
-      s: (enPromo(r) ? 100 : 0) + (pleineSaison(r) ? 10 : 0) + (!saveursVues.has(saveurDe(r)) ? 5 : 0) + Math.random(),
+      s: (enPromo(r) ? 100 : 0) + (estFavori(r.nom) ? 30 : 0) + (pleineSaison(r) ? 10 : 0) + (!saveursVues.has(saveurDe(r)) ? 5 : 0) + Math.random(),
     }));
     scored.sort((a, b) => b.s - a.s);
     return scored[0].r;
@@ -166,7 +183,7 @@
     }).sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
     for (const i of ordre) {
       const r = choisir(cadre[i], interdites, plan, i);
-      if (r) plan[i] = { jour: cadre[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r) };
+      if (r) plan[i] = { jour: cadre[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, i, plan) };
     }
     state.semaine = { num, cadreId: state.cadreId, plan: plan.filter(Boolean) };
     save();
@@ -179,10 +196,12 @@
     if (idx < 0) return;
     const cadre = getCadre().find((c) => c.jour === jour);
     const interdites = recentes(s.num - 1);
-    s.plan.forEach((p, i) => { if (i !== idx) interdites.add(p.nom); });
+    s.plan.forEach((p) => interdites.add(p.nom));   // exclut TOUTE la semaine, dont le plat actuel → force un vrai changement
     const copie = s.plan.slice(); copie[idx] = null;
-    const r = choisir(cadre, interdites, copie, idx);
-    if (r) { s.plan[idx] = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r) }; save(); }
+    let r = choisir(cadre, interdites, copie, idx);
+    // si un seul candidat existe (plat actuel ré-exclu), on relâche pour ne pas planter
+    if (!r) { interdites.delete(s.plan[idx].nom); r = choisir(cadre, interdites, copie, idx); }
+    if (r) { s.plan[idx] = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) }; save(); }
   }
 
   const getR = (nom) => RECIPES.find((r) => r.nom === nom);
@@ -191,11 +210,9 @@
   function listeCourses() {
     const acc = {};
     if (!state.semaine) return acc;
-    state.semaine.plan.forEach((p) => {
-      const r = getR(p.nom);
-      if (!r) return;
-      const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
-      r.ingredients.forEach((ing) => {
+    const ajoute = (source, ingredients, parts) => {
+      const facteur = PARTS_CIBLE / (parts || PARTS_CIBLE);
+      (ingredients || []).forEach((ing) => {
         const rayon = ing.rayon || "Épicerie";
         const key = norm(ing.nom);
         acc[rayon] = acc[rayon] || {};
@@ -204,8 +221,17 @@
           const u = ing.unite || "";
           e.unites[u] = Math.round(((e.unites[u] || 0) + ing.qte * facteur) * 10) / 10;
         }
-        if (!e.plats.includes(r.nom)) e.plats.push(r.nom);
+        if (!e.plats.includes(source)) e.plats.push(source);
       });
+    };
+    state.semaine.plan.forEach((p) => {
+      const r = getR(p.nom);
+      if (r) ajoute(r.nom, r.ingredients, r.parts_origine);
+      // ingrédients de l'accompagnement du jour
+      if (p.side) {
+        const a = ACC().find((x) => x.nom === p.side.nom);
+        if (a) ajoute(a.nom, a.ingredients, a.parts_origine);
+      }
     });
     return acc;
   }
@@ -217,11 +243,10 @@
   // ---------- rendu ----------
   const badge = (t, c) => `<span class="badge ${c || ""}">${esc(t)}</span>`;
 
-  // bulles d'une recette : cuissons (dont air fryer) + nutrition
+  // bulles d'une recette : modes de cuisson (dont air fryer)
   function bullesRecette(r) {
     let out = (r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ");
     if (r.air_fryer) out += " " + badge("🍟 air fryer", "airfryer");
-    out += " " + (r.nutrition || []).map((n) => badge(n, "nutri")).join(" ");
     return out;
   }
 
@@ -256,11 +281,14 @@
       if (!r) return;
       const cadre = getCadre().find((c) => c.jour === p.jour);
       html += `<div class="card day">
-        <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span></div>
+        <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span>
+          <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
+        </div>
         <div class="plat">${esc(r.nom)}</div>
-        ${r.morceau ? `<div class="morceau">🥩 ${esc(r.morceau)}</div>` : ""}
         <div class="temps">${tempsRecette(r)}</div>
         <div class="meta">${bullesRecette(r)}</div>
+        ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a></div>` : ""}
+        ${r.bonus ? `<div class="bonus">✨ Le p'tit plus : ${esc(r.bonus)}</div>` : ""}
         <div class="constraint">${esc(cadre ? cadre.note : "")}</div>
         ${blocRecette(r)}
         <div class="actions"><button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer ce plat</button></div>
@@ -314,11 +342,13 @@
       html += `<h3 class="cat-title">${esc(cat)}</h3><div class="cards">`;
       RECIPES.filter((r) => r.cat === cat).forEach((r) => {
         const ex = estExclu(r);
-        html += `<div class="card recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + (r.morceau || "") + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
-          <div class="plat">${esc(r.nom)}${ex ? ` <span class="badge off">exclue</span>` : ""}</div>
-          ${r.morceau ? `<div class="morceau">🥩 ${esc(r.morceau)}</div>` : ""}
+        html += `<div class="card recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
+          <div class="card-top"><span class="plat">${esc(r.nom)}${ex ? ` <span class="badge off">exclue</span>` : ""}</span>
+            <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
+          </div>
           <div class="temps">${tempsRecette(r)}</div>
           <div class="meta">${bullesRecette(r)} ${badge(r.saison, "season")}</div>
+          ${r.bonus ? `<div class="bonus">✨ Le p'tit plus : ${esc(r.bonus)}</div>` : ""}
           ${blocRecette(r)}
         </div>`;
       });
@@ -370,6 +400,27 @@
       <div class="chips">`;
     state.exclusions.forEach((e, i) => {
       html += `<span class="chip">${esc(e)}<button data-act="unexclude" data-i="${i}" title="Retirer">✕</button></span>`;
+    });
+    html += `</div>
+      <h3 class="cat-title">❤️ Mes favoris</h3>
+      <p class="hint">Les recettes que tu aimes (cœur sur une carte) reviennent plus souvent.</p>`;
+    if (!state.favoris.length) html += `<p class="empty">Aucun favori. Touche le 🤍 sur une recette.</p>`;
+    else {
+      html += `<div class="chips">`;
+      state.favoris.forEach((nom) => {
+        html += `<span class="chip fav-chip">${esc(nom)}<button data-act="fav" data-nom="${esc(nom)}" title="Retirer">✕</button></span>`;
+      });
+      html += `</div>`;
+    }
+    html += `<h3 class="cat-title">💡 Mes envies (à scraper)</h3>
+      <p class="hint">Propose un plat que tu aimerais voir ajouté. Je le rechercherai sur les sites et l'ajouterai à ta base.</p>
+      <div class="add-row">
+        <input id="new-envie" placeholder="Ex. : blanquette de la mer" />
+        <button id="btn-add-envie">Ajouter</button>
+      </div>
+      <div class="chips">`;
+    state.envies.forEach((e, i) => {
+      html += `<span class="chip envie">${esc(e)}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     html += `</div>
       <h3 class="cat-title">Historique</h3>
@@ -439,7 +490,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save(); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreId: "equilibre", coursesCochees: {} };
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreId: "equilibre", favoris: [], envies: [], coursesCochees: {} };
         save(); show("semaine");
       }
       return;
@@ -460,6 +511,22 @@
       return;
     }
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save(); return renderReglages(); }
+    if (act === "fav") {
+      const nom = t.dataset.nom;
+      if (estFavori(nom)) state.favoris = state.favoris.filter((x) => x !== nom);
+      else state.favoris.push(nom);
+      save();
+      RENDER[vueActive()]();
+      toast(estFavori(nom) ? "Ajouté aux favoris ❤️" : "Retiré des favoris");
+      return;
+    }
+    if (t.id === "btn-add-envie") {
+      const inp = document.getElementById("new-envie");
+      const v = (inp.value || "").trim();
+      if (v && !state.envies.includes(v)) { state.envies.push(v); save(); inp.value = ""; renderReglages(); toast("Envie ajoutée — je la scraperai"); }
+      return;
+    }
+    if (act === "del-envie") { state.envies.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save(); return renderReglages(); }
     if (act === "preset") {
       const btn = t.closest(".preset");
