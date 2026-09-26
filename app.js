@@ -86,7 +86,11 @@
 
   // ---------- state ----------
   function load() { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; } }
-  const save = () => localStorage.setItem(STORE, JSON.stringify(state));
+  // save(champ) : persiste et, si un hub partagé est configuré, signale le champ modifié
+  function save(champ, idCase, decochee) {
+    localStorage.setItem(STORE, JSON.stringify(state));
+    if (window.__sync) window.__sync.signalerChangement(champ, idCase, decochee);
+  }
   let state = load();
   if (!state.semaine) state.semaine = null;
   if (!state.historique) state.historique = [];
@@ -124,7 +128,7 @@
   function ajouterPromo(mot) {
     const m = (mot || "").trim();
     if (!m || state.promos.some((e) => norm(e) === norm(m))) return false;
-    state.promos.push(m); save(); return true;
+    state.promos.push(m); save("promos"); return true;
   }
 
   const estExclu = (r) => r.ingredients.some((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))));
@@ -134,7 +138,7 @@
     if (!m) return false;
     if (state.exclusions.some((e) => norm(e) === norm(m))) return false;
     state.exclusions.push(m);
-    save();
+    save("exclusions");
     return true;
   }
 
@@ -216,7 +220,7 @@
       if (r) plan[i] = { jour: cadre[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, i, plan) };
     }
     state.semaine = { num, plan: plan.filter(Boolean) };
-    save();
+    save("semaine");
     return state.semaine;
   }
 
@@ -231,7 +235,7 @@
     let r = choisir(cadre, interdites, copie, idx);
     // si un seul candidat existe (plat actuel ré-exclu), on relâche pour ne pas planter
     if (!r) { interdites.delete(s.plan[idx].nom); r = choisir(cadre, interdites, copie, idx); }
-    if (r) { s.plan[idx] = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) }; save(); }
+    if (r) { s.plan[idx] = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) }; save("semaine"); }
   }
 
   const getR = (nom) => RECIPES.find((r) => r.nom === nom);
@@ -552,7 +556,25 @@
       html += `<span class="chip envie">${esc(e)}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     html += `</div>
-      <h3 class="cat-title">Données</h3>
+      <h3 class="cat-title">🔗 Partage à deux</h3>`;
+    const sc = window.__sync ? window.__sync.conf() : null;
+    if (sc && sc.url && sc.token) {
+      html += `<p class="hint">Cet appareil partage son menu, ses courses et ses notes.
+        ${sc.erreur ? `<br><strong>⚠️ Dernière synchro en échec : ${esc(sc.erreur)}</strong>` : ""}
+        ${sc.derniere ? `<br>Dernière synchro : ${new Date(sc.derniere).toLocaleString("fr-FR")}` : ""}</p>
+        <div class="actions">
+          <button id="btn-sync-now">↻ Synchroniser</button>
+          <button id="btn-sync-off">Se déconnecter</button>
+        </div>`;
+    } else {
+      html += `<p class="hint">Colle ici l'adresse du hub et le mot de passe pour partager le menu et la liste de courses avec Marine. Les deux téléphones doivent saisir exactement les mêmes.</p>
+        <div class="add-row"><input id="sync-url" placeholder="Adresse du hub (…/exec)" /></div>
+        <div class="add-row">
+          <input id="sync-token" placeholder="Mot de passe partagé" />
+          <button id="btn-sync-on">Connecter</button>
+        </div>`;
+    }
+    html += `<h3 class="cat-title">Données</h3>
       <p class="hint">L'historique de tes plats cuisinés est dans l'onglet 🕑 Historique.</p>
       <button id="btn-reset" class="linkbtn danger">Tout réinitialiser</button>`;
     el.innerHTML = html;
@@ -607,11 +629,28 @@
       navigator.clipboard.writeText(texteCourses()).then(() => toast("Liste copiée")).catch(() => toast("Copie impossible"));
       return;
     }
-    if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save(); return renderCourses(); }
+    if (t.id === "btn-sync-on") {
+      const u = document.getElementById("sync-url").value;
+      const k = document.getElementById("sync-token").value;
+      if (!u || !k) return toast("Adresse et mot de passe requis");
+      t.disabled = true; t.textContent = "…";
+      window.__sync.connecter(u, k).then((ok) => {
+        renderReglages();
+        toast(ok ? "Partage activé 🔗" : "Connexion impossible — vérifie l'adresse et le mot de passe");
+      });
+      return;
+    }
+    if (t.id === "btn-sync-off") { window.__sync.deconnecter(); renderReglages(); return toast("Partage désactivé"); }
+    if (t.id === "btn-sync-now") {
+      t.disabled = true; t.textContent = "…";
+      window.__sync.maintenant().then(() => { renderReglages(); toast("Synchronisé"); });
+      return;
+    }
+    if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save("coursesCochees"); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
         state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {} };
-        save(); show("semaine");
+        save("semaine"); show("semaine");
       }
       return;
     }
@@ -627,7 +666,7 @@
         if (pool.length) {
           const a = pool[Math.floor(Math.random() * pool.length)];
           p.side = { nom: a.nom, url: a.url, source: a.source };
-          save(); renderSemaine();
+          save("semaine"); renderSemaine();
         } else toast("Pas d'autre accompagnement adapté");
       }
       return;
@@ -638,20 +677,20 @@
         // remplace les plats du menu devenus invalides
         if (state.semaine) {
           state.semaine.plan.slice().forEach((p) => { const r = getR(p.nom); if (r && estExclu(r)) regenJour(p.jour); });
-          save();
+          save("semaine");
         }
         RENDER[vueActive()]();
         toast(`« ${ing} » exclu — recettes remplacées`);
       } else toast("Déjà dans les exclusions");
       return;
     }
-    if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save(); return renderReglages(); }
+    if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save("exclusions"); return renderReglages(); }
     if (act === "fait") {
       const num = state.semaine.num, jour = t.dataset.jour, nom = t.dataset.nom;
       const h = state.historique.find((x) => x.num === num && x.jour === jour);
       if (h) { h.fait = !h.fait; h.nom = nom; }
       else state.historique.push({ num, jour, nom, fait: true, note: state.notes[nom] || 0 });
-      save(); renderSemaine();
+      save("historique"); renderSemaine();
       return;
     }
     if (act === "note") {
@@ -662,14 +701,14 @@
       // répercute sur l'historique du plat (0 si la note vient d'être effacée)
       const nouvelle = state.notes[nom] || 0;
       state.historique.forEach((h) => { if (h.nom === nom) h.note = nouvelle; });
-      save(); RENDER[vueActive()]();
+      save("notes"); RENDER[vueActive()]();
       return;
     }
     if (act === "fav") {
       const nom = t.dataset.nom;
       if (estFavori(nom)) state.favoris = state.favoris.filter((x) => x !== nom);
       else state.favoris.push(nom);
-      save();
+      save("favoris");
       RENDER[vueActive()]();
       toast(estFavori(nom) ? "Ajouté aux favoris ❤️" : "Retiré des favoris");
       return;
@@ -677,24 +716,24 @@
     if (t.id === "btn-add-envie") {
       const inp = document.getElementById("new-envie");
       const v = (inp.value || "").trim();
-      if (v && !state.envies.includes(v)) { state.envies.push(v); save(); inp.value = ""; renderReglages(); toast("Envie ajoutée — je la scraperai"); }
+      if (v && !state.envies.includes(v)) { state.envies.push(v); save("envies"); inp.value = ""; renderReglages(); toast("Envie ajoutée — je la scraperai"); }
       return;
     }
-    if (act === "del-envie") { state.envies.splice(+t.dataset.i, 1); save(); return renderReglages(); }
-    if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save(); return renderReglages(); }
+    if (act === "del-envie") { state.envies.splice(+t.dataset.i, 1); save("envies"); return renderReglages(); }
+    if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save("promos"); return renderReglages(); }
     if (act === "preset") {
       const p = (window.CADRE_PRESETS || []).find((x) => x.id === t.dataset.id);
       if (p) {
         const CAT2 = { "Volaille": "volaille", "Porc": "porc", "Poisson": "poisson", "Légumineuses": "legumineuses", "Rapide (sport)": "express", "Mijoté": "mijote", "Rôti": "roti" };
         state.cadreJours = p.cadre.map((c) => CAT2[c.cats[0]] || "libre");
-        generer(); save(); renderReglages();
+        generer(); save("cadreJours"); renderReglages();
         toast("Modèle appliqué — menu régénéré");
       }
       return;
     }
     if (act === "del-hist") {
       state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && h.num === +t.dataset.num));
-      save(); return renderReglages();
+      save("historique"); return renderReglages();
     }
   });
 
@@ -703,20 +742,25 @@
       const i = +e.target.dataset.i;
       state.cadreJours = (state.cadreJours || CADRE_JOURS_DEFAUT).slice();
       state.cadreJours[i] = e.target.value;
-      generer(); save(); renderReglages();
+      generer(); save("cadreJours"); renderReglages();
       toast(JOURS[i] + " : " + STYLE(e.target.value).label);
       return;
     }
     if (e.target.dataset.act === "course") {
       const id = e.target.dataset.id;
       if (e.target.checked) state.coursesCochees[id] = true; else delete state.coursesCochees[id];
-      save();
+      save(null, id, !e.target.checked);
       e.target.closest(".shop-row").classList.toggle("checked", e.target.checked);
     }
   });
 
   // exposé pour les tests automatisés
-  window.__mims = { generer, listeCourses, estExclu, getCadre, getState: () => state };
+  window.__mims = {
+    generer, listeCourses, estExclu, getCadre,
+    getState: () => state,
+    sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
+    rafraichir: () => { try { RENDER[vueActive()](); } catch (e) {} },
+  };
 
   document.addEventListener("DOMContentLoaded", () => show("semaine"));
 })();

@@ -16,7 +16,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
 </head>
 <body>
-  <header><h1>🍲 Recettes des Mim's</h1></header>
+  <header><h1>🍲 Recettes des Mim's</h1><span id="sync-etat" class="sync-etat"></span></header>
 
   <main>
     <section id="view-semaine" class="view active"></section>
@@ -36,6 +36,7 @@
 
   <script src="data.js"></script>
   <script src="app.js"></script>
+  <script src="sync.js"></script>
   <script>
     // Hors-ligne : uniquement en https (GitHub Pages) ou en local, jamais en file://
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
