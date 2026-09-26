@@ -11,6 +11,7 @@
     { id: "porc", label: "🥓 Porc", cats: ["Porc"], maxMin: null },
     { id: "poisson", label: "🐟 Poisson", cats: ["Poisson"], maxMin: null },
     { id: "legumineuses", label: "🫘 Légumineuses / végé", cats: ["Légumineuses"], maxMin: null },
+    { id: "express", label: "🚀 Express (≤15 min)", cats: ["Volaille", "Porc", "Poisson", "Légumineuses", "Rapide (sport)"], maxMin: 15 },
     { id: "rapide", label: "⚡ Rapide (≤30 min)", cats: ["Volaille", "Porc", "Poisson", "Légumineuses", "Rapide (sport)"], maxMin: 30 },
     { id: "sport", label: "💪 Rapide sport (protéiné, ≤30 min)", cats: ["Volaille", "Porc", "Poisson", "Rapide (sport)"], maxMin: 30, proteine: true },
     { id: "mijote", label: "🍲 Mijoté (j'ai le temps)", cats: ["Mijoté"], maxMin: null },
@@ -168,7 +169,15 @@
     const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
 
     let pool = candidats(cadre, interdites);
-    if (!pool.length) pool = RECIPES.filter((r) => cadre.cats.includes(r.cat) && !estExclu(r));
+    if (!pool.length) {
+      // Repli : on relâche la saison et l'anti-répétition, JAMAIS le temps ni la protéine —
+      // sinon un jour « Express ≤15 min » pourrait servir un mijoté de 3 h.
+      pool = RECIPES.filter((r) =>
+        cadre.cats.includes(r.cat) && !estExclu(r) &&
+        (!cadre.maxMin || (r.total_min || 0) <= cadre.maxMin) &&
+        (!cadre.proteine || PROT_SPORT.has(norm(r.proteine)))
+      );
+    }
     if (!pool.length) return null;
 
     // CONTRAINTES DURES (adjacence protéine, quota hebdo) : on relâche par paliers si besoin
@@ -316,10 +325,18 @@
     const s = state.semaine;
     let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · ${esc(plageSemaine(s.num))} · ${PARTS_CIBLE} parts/plat</div>
       <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
-    s.plan.forEach((p) => {
-      const r = getR(p.nom);
-      if (!r) return;
-      const cadre = getCadre().find((c) => c.jour === p.jour);
+    // on parcourt le CADRE (et non le plan) pour rendre visible un jour sans plat possible
+    getCadre().forEach((cadre) => {
+      const p = s.plan.find((x) => x.jour === cadre.jour);
+      const r = p && getR(p.nom);
+      if (!r) {
+        html += `<div class="card day vide">
+          <div class="card-top"><span class="jour">${esc(cadre.jour)}</span><span class="cat">${esc(cadre.note)}</span></div>
+          <div class="plat">Aucun plat ne correspond</div>
+          <div class="constraint">Aucune recette de la base ne tient ce critère (temps trop court, ou tout est exclu). Choisis un autre style pour ce jour dans Réglages, ou ajoute une envie pour enrichir la base.</div>
+        </div>`;
+        return;
+      }
       html += `<div class="card day">
         <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span>
           <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
