@@ -274,8 +274,14 @@
       const cls = note >= n ? "full" : (note >= n - 0.5 ? "half" : "empty");
       h += `<span class="star ${cls}">★<span class="hz l" data-act="note" data-nom="${esc(nom)}" data-val="${n - 0.5}"></span><span class="hz r" data-act="note" data-nom="${esc(nom)}" data-val="${n}"></span></span>`;
     }
-    h += note ? ` <span class="note-val">${note}/5</span><button class="clr" data-act="note" data-nom="${esc(nom)}" data-val="0" title="Effacer">✕</button>` : "";
-    return h + `</span>`;
+    h += `</span>`;
+    // fix-ok: ajout UI demandé par l'utilisateur — bouton d'effacement explicite, le re-clic
+    // sur la demi-étoile étant trop difficile à viser au doigt.
+    h += note
+      ? ` <span class="note-val">${note}/5</span>
+         <button class="btn-clr" data-act="note" data-nom="${esc(nom)}" data-val="0">✕ Effacer</button>`
+      : ` <span class="note-val note-vide">pas encore notée</span>`;
+    return h;
   }
 
   // bulles d'une recette : modes de cuisson (dont air fryer)
@@ -321,7 +327,8 @@
         <div class="plat">${esc(r.nom)}</div>
         <div class="temps">${tempsRecette(r)}</div>
         <div class="meta">${bullesRecette(r)}</div>
-        ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a></div>` : ""}
+        ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
+          <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement">↻</button></div>` : ""}
         ${r.bonus ? `<div class="bonus">✨ Le p'tit plus : ${esc(r.bonus)}</div>` : ""}
         <div class="constraint">${esc(cadre ? cadre.note : "")}</div>
         ${blocRecette(r)}
@@ -593,6 +600,21 @@
     }
     const act = t.dataset.act;
     if (act === "regen-day") { regenJour(t.dataset.jour); return renderSemaine(); }
+    if (act === "regen-side") {
+      // repioche un accompagnement COMPATIBLE avec la catégorie du plat, et différent de l'actuel
+      const p = state.semaine.plan.find((x) => x.jour === t.dataset.jour);
+      const r = p && getR(p.nom);
+      if (r) {
+        const compat = ACC().filter((a) => (a.suits || []).includes(r.cat));
+        const pool = (compat.length ? compat : ACC()).filter((a) => !p.side || a.nom !== p.side.nom);
+        if (pool.length) {
+          const a = pool[Math.floor(Math.random() * pool.length)];
+          p.side = { nom: a.nom, url: a.url, source: a.source };
+          save(); renderSemaine();
+        } else toast("Pas d'autre accompagnement adapté");
+      }
+      return;
+    }
     if (act === "exclure") {
       const ing = t.dataset.ing;
       if (ajouterExclusion(ing)) {

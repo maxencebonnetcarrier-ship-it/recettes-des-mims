@@ -73,7 +73,19 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .hz { position: absolute; top: 0; bottom: 0; width: 50%; }
 .hz.l { left: 0; } .hz.r { right: 0; }
 .note-val { font-size: .8rem; color: var(--muted); margin-left: 5px; }
-.clr { border: none; background: none; color: var(--muted); cursor: pointer; font-size: .8rem; }
+.note-vide { font-style: italic; }
+.btn-clr {
+  margin-left: 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--bg); color: var(--muted); font-size: .75rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.btn-clr:active { background: #c0532f; color: #fff; border-color: #c0532f; }
+.side { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.btn-side {
+  border: 1px solid var(--line); border-radius: 50%; background: var(--bg); color: var(--accent);
+  width: 28px; height: 28px; cursor: pointer; font-size: .85rem; flex-shrink: 0; line-height: 1;
+}
+.btn-side:active { background: var(--accent-soft); }
+.note-row { flex-wrap: wrap; }
 .fait.done { background: var(--ok); border-color: #7fb069; color: #3a7a2e; }
 .presets { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .preset { text-align: left; background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
