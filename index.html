@@ -6,6 +6,14 @@
   <meta name="theme-color" content="#b5651d" />
   <title>Recettes des Mim's</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Écran d'accueil : Android/Chrome via le manifeste, iPhone via les balises apple-* -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Mim's" />
+  <meta name="mobile-web-app-capable" content="yes" />
 </head>
 <body>
   <header><h1>🍲 Recettes des Mim's</h1></header>
@@ -28,5 +36,11 @@
 
   <script src="data.js"></script>
   <script src="app.js"></script>
+  <script>
+    // Hors-ligne : uniquement en https (GitHub Pages) ou en local, jamais en file://
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    }
+  </script>
 </body>
 </html>
