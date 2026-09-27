@@ -385,6 +385,17 @@
     getCadre().forEach((cadre) => {
       const p = s.plan.find((x) => x.jour === cadre.jour);
       const r = p && getR(p.nom);
+      const attendu = nomEpingle(cadre.jour);
+      if (!r && attendu) {
+        // une recette a été demandée pour ce jour mais n'est pas encore dans la base
+        html += `<div class="card day vide">
+          <div class="card-top"><span class="jour">${esc(cadre.jour)}</span><span class="cat">en attente</span></div>
+          <div class="plat">📌 ${esc(attendu)}</div>
+          <div class="epingle-info">Tu as demandé ce plat pour ce jour. Il apparaîtra ici dès qu'il sera ajouté à ta base.</div>
+          <div class="actions"><button data-act="desepingler" data-jour="${esc(cadre.jour)}">Annuler la demande</button></div>
+        </div>`;
+        return;
+      }
       if (!r) {
         html += `<div class="card day vide">
           <div class="card-top"><span class="jour">${esc(cadre.jour)}</span><span class="cat">${esc(cadre.note)}</span></div>
@@ -398,6 +409,9 @@
           <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
         </div>
         <div class="plat">${p.epingle ? "📌 " : ""}${esc(r.nom)}</div>
+        ${(!p.epingle && attendu) ? `<div class="epingle-info">📌 Tu as demandé <strong>${esc(attendu)}</strong> pour ce jour.
+          En attendant qu'il soit ajouté à ta base, voici une proposition.
+          <br><button class="linkbtn" data-act="desepingler" data-jour="${esc(p.jour)}">Annuler la demande</button></div>` : ""}
         ${p.epingle ? `<div class="epingle-info">Plat imposé par toi pour ce jour.
           ${p.horsCadre ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}).` : ""}
           ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}</div>` : ""}
@@ -604,14 +618,29 @@
       html += `</div>`;
     }
     html += `<h3 class="cat-title">💡 Mes envies (à scraper)</h3>
-      <p class="hint">Propose un plat que tu aimerais voir ajouté. Je le rechercherai sur les sites et l'ajouterai à ta base.</p>
+      <p class="hint">Propose un plat que tu aimerais voir ajouté. Tu peux coller le lien d'une recette,
+        et choisir un jour pour qu'elle y soit imposée dès qu'elle est dans ta base.</p>
       <div class="add-row">
-        <input id="new-envie" placeholder="Ex. : blanquette de la mer" />
+        <input id="new-envie" placeholder="Ex. : enchiladas au poulet" />
+      </div>
+      <div class="add-row">
+        <input id="new-envie-url" placeholder="Lien de la recette (facultatif)" />
+      </div>
+      <div class="add-row">
+        <select id="new-envie-jour">
+          <option value="">Sans jour précis</option>
+          ${JOURS.map((j) => `<option value="${j}">Pour ${j.toLowerCase()}</option>`).join("")}
+        </select>
         <button id="btn-add-envie">Ajouter</button>
       </div>
       <div class="chips">`;
     state.envies.forEach((e, i) => {
-      html += `<span class="chip envie">${esc(e)}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
+      // une envie est soit un simple texte (ancien format), soit { nom, url, jour }
+      const nom = e && e.nom ? e.nom : e;
+      const jour = e && e.jour ? e.jour : null;
+      const url = e && e.url ? e.url : null;
+      const attente = jour && !getR(nom) ? ` · en attente d'ajout` : "";
+      html += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${esc(attente)})</em>` : ""}${url ? " 🔗" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     html += `</div>
       <h3 class="cat-title">🔗 Partage à deux</h3>`;
@@ -788,11 +817,28 @@
     }
     if (t.id === "btn-add-envie") {
       const inp = document.getElementById("new-envie");
+      const inpUrl = document.getElementById("new-envie-url");
+      const selJour = document.getElementById("new-envie-jour");
       const v = (inp.value || "").trim();
-      if (v && !state.envies.includes(v)) { state.envies.push(v); save("envies"); inp.value = ""; renderReglages(); toast("Envie ajoutée — je la scraperai"); }
-      return;
+      if (!v) return;
+      const jour = selJour ? selJour.value : "";
+      const url = inpUrl ? (inpUrl.value || "").trim() : "";
+      if (state.envies.some((e) => norm(e && e.nom ? e.nom : e) === norm(v))) return toast("Déjà dans la liste");
+      state.envies.push({ nom: v, url: url || null, jour: jour || null });
+      save("envies");
+      // un jour choisi = épingle posée d'avance : elle restera « en attente » tant que la
+      // recette n'est pas dans la base, puis s'appliquera toute seule au premier menu suivant.
+      if (jour) { epingler(jour, v); generer(); }
+      inp.value = ""; if (inpUrl) inpUrl.value = "";
+      renderReglages();
+      return toast(jour ? `Noté — ${v} sera imposé ${jour.toLowerCase()} dès que je l'ai ajouté` : "Envie ajoutée — je la scraperai");
     }
-    if (act === "del-envie") { state.envies.splice(+t.dataset.i, 1); save("envies"); return renderReglages(); }
+    if (act === "del-envie") {
+      const e = state.envies[+t.dataset.i];
+      const j = e && e.jour;
+      if (j && nomEpingle(j) === (e.nom || e)) desepingler(j);   // on retire aussi l'épingle en attente
+      state.envies.splice(+t.dataset.i, 1); save("envies"); return renderReglages();
+    }
     if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save("promos"); return renderReglages(); }
     if (act === "preset") {
       const p = (window.CADRE_PRESETS || []).find((x) => x.id === t.dataset.id);

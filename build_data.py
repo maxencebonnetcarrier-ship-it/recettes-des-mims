@@ -197,7 +197,12 @@ def valider(recettes):
         if not ingr:
             pbs.append(f"{nom}: aucun ingrédient")
             continue
-        if r.get("cat") not in cats_cadre:
+        # Une recette DEMANDÉE explicitement par l'utilisateur ("demande": true) entre dans
+        # la base même si elle sort du cadre ou contient un ingrédient exclu : c'est un choix
+        # assumé, et l'app le signale à l'écran quand elle est imposée sur un jour. Les
+        # recettes trouvées automatiquement restent soumises à toutes les règles.
+        demandee = bool(r.get("demande"))
+        if r.get("cat") not in cats_cadre and not demandee:
             pbs.append(f"{nom}: catégorie '{r.get('cat')}' hors cadre")
             continue
         if not r.get("proteine"):
@@ -206,7 +211,7 @@ def valider(recettes):
         # une recette contenant un exclu par défaut ne doit pas entrer dans la base
         touche = [i["nom"] for i in ingr
                   if any(ex in norm(i.get("nom", "")) for ex in (norm(e) for e in EXCLUS_DEFAUT))]
-        if touche:
+        if touche and not demandee:
             pbs.append(f"{nom}: contient un ingrédient exclu ({', '.join(touche)})")
             continue
         # normalise le rayon
