@@ -40,7 +40,26 @@
   <script>
     // Hors-ligne : uniquement en https (GitHub Pages) ou en local, jamais en file://
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
-      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+      // Quand une nouvelle version est publiée, le service worker se met à jour tout seul,
+      // MAIS la page continue d'exécuter l'ancien code déjà chargé en mémoire — sur une app
+      // installée sur l'écran d'accueil, elle n'est quasiment jamais rechargée, donc la
+      // nouveauté n'arrivait jamais. On recharge donc une fois, dès que la nouvelle version
+      // prend le contrôle. Le garde-fou évite toute boucle de rechargement.
+      let dejaRecharge = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (dejaRecharge) return;
+        dejaRecharge = true;
+        location.reload();
+      });
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").then((reg) => {
+          // on revérifie à chaque retour sur l'app : c'est le moment naturel pour découvrir
+          // une mise à jour publiée pendant qu'elle était en arrière-plan.
+          document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) reg.update().catch(() => {});
+          });
+        }).catch(() => {});
+      });
     }
   </script>
 </body>
