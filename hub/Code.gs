@@ -16,14 +16,21 @@
  * puissent cocher en même temps en magasin sans s'écraser.
  */
 
-var SECRET_TOKEN = "CHANGE_MOI_avec_un_secret_long";
+// Le secret NE vit PAS dans le code (le dépôt est public).
+// Il se pose une seule fois dans : Paramètres du projet → Propriétés du script
+// → propriété nommée SECRET_TOKEN. Le changer ne demande AUCUN redéploiement.
+function _secret() {
+  return PropertiesService.getScriptProperties().getProperty("SECRET_TOKEN") || "";
+}
+
 var CLE = "mims_state";          // clé de stockage du foyer
 var MAX_OCTETS = 450000;          // garde-fou (limite Properties ~500 ko)
 
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
-    if (p.token !== SECRET_TOKEN) return _json({ ok: false, error: "token" }, 401);
+    var s = _secret();
+    if (!s || p.token !== s) return _json({ ok: false, error: "token" }, 401);
     return _json({ ok: true, state: _lire(), updatedAt: _lire().__updatedAt || 0 });
   } catch (err) {
     return _json({ ok: false, error: String(err) }, 500);
@@ -35,7 +42,8 @@ function doPost(e) {
   try {
     verrou.waitLock(10000);   // évite deux écritures simultanées
     var corps = JSON.parse((e && e.postData && e.postData.contents) || "{}");
-    if (corps.token !== SECRET_TOKEN) return _json({ ok: false, error: "token" }, 401);
+    var s = _secret();
+    if (!s || corps.token !== s) return _json({ ok: false, error: "token" }, 401);
 
     var actuel = _lire();
     var fusionne = _fusionner(actuel, corps.patch || {});
@@ -114,9 +122,9 @@ function _reinitialiser() {
 /** Test rapide à lancer depuis l'éditeur : doit afficher ok:true puis l'état fusionné. */
 function _testHub() {
   var faux = { postData: { contents: JSON.stringify({
-    token: SECRET_TOKEN,
+    token: _secret(),
     patch: { favoris: { v: ["Test"], t: Date.now() } }
   }) } };
   Logger.log(doPost(faux).getContent());
-  Logger.log(doGet({ parameter: { token: SECRET_TOKEN } }).getContent());
+  Logger.log(doGet({ parameter: { token: _secret() } }).getContent());
 }

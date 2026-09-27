@@ -111,7 +111,7 @@
       if (change) api.rafraichir();
       majIndicateur("ok");
     } catch (e) {
-      conf.erreur = String(e.message || e);
+      conf.erreur = enClair(e);
       sauverConf();
       majIndicateur("erreur");
     } finally {
@@ -146,6 +146,34 @@
     el.className = "sync-etat " + etat;
   }
 
+  /* ---------- messages compréhensibles ---------- */
+
+  /** Contrôle la FORME de l'adresse. Renvoie null si elle est plausible, sinon quoi corriger. */
+  function soucisAdresse(u) {
+    if (!u) return "Adresse du hub manquante.";
+    if (!/^https:\/\//i.test(u))
+      return "Adresse incomplète : elle doit commencer par « https:// ». Recopie-la en entier.";
+    if (!/^https:\/\/script\.google\.com\//i.test(u))
+      return "Ce n'est pas une adresse de hub Google Apps Script.";
+    if (!/\/exec$/i.test(u))
+      return "L'adresse doit se terminer par « /exec ». La fin a été coupée à la copie.";
+    return null;
+  }
+
+  /** Traduit une erreur technique en phrase qui dit quoi faire. */
+  function enClair(e) {
+    const brut = String((e && e.message) || e || "");
+    if (brut === "token")
+      return "Mot de passe refusé. Les deux téléphones doivent saisir exactement le même, majuscules comprises.";
+    if (/^HTTP 40/.test(brut))
+      return "Le hub est introuvable à cette adresse. Vérifie qu'elle est collée en entier.";
+    if (/^HTTP 5/.test(brut))
+      return "Le hub a renvoyé une erreur. Réessaie dans un instant.";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(brut))
+      return "Pas de connexion au hub. Vérifie ton accès à Internet.";
+    return brut;
+  }
+
   /* ---------- API exposée aux Réglages ---------- */
   window.__sync = {
     actif,
@@ -153,6 +181,15 @@
     async connecter(url, token) {
       conf.url = (url || "").trim();
       conf.token = (token || "").trim();
+      // L'adresse est vérifiée AVANT d'appeler le hub : collée en partie (cas fréquent sur
+      // téléphone), elle produisait un « HTTP 404 » incompréhensible.
+      const souci = soucisAdresse(conf.url);
+      if (souci) {
+        conf.url = ""; conf.token = "";
+        conf.erreur = souci;
+        sauverConf();
+        return false;
+      }
       sauverConf();
       try {
         // 1) on LIT d'abord : le foyer qui existe déjà fait autorité
@@ -170,7 +207,7 @@
         sauverConf();
         await synchroniser({ pousser: true });
       } catch (e) {
-        conf.erreur = String(e.message || e);
+        conf.erreur = enClair(e);
         sauverConf();
         majIndicateur("erreur");
       }
