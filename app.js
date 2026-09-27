@@ -101,6 +101,7 @@
   if (!state.notes) state.notes = {};           // note /5 (demi-étoiles) par recette → priorité
   if (!state.envies) state.envies = [];         // plats que l'utilisateur veut voir scrapés plus tard
   if (!state.coursesCochees) state.coursesCochees = {};
+  if (!state.epingles) state.epingles = {};     // jour → recette imposée pour la semaine en cours
 
   const estFavori = (nom) => state.favoris.includes(nom);
   const ACC = () => window.ACCOMPAGNEMENTS || [];
@@ -204,20 +205,68 @@
     return scored[0].r;
   }
 
+  /* ---------- recettes épinglées (imposées sur un jour précis) ---------- */
+
+  const epinglesDe = () => state.epingles || (state.epingles = {});
+  const nomEpingle = (jour) => { const e = epinglesDe()[jour]; return e ? (e.nom || e) : null; };
+
+  /** Impose une recette sur un jour. Une seule par jour : la nouvelle remplace l'ancienne. */
+  function epingler(jour, nom) {
+    if (!jour || !nom) return false;
+    epinglesDe()[jour] = { nom: nom, t: Date.now() };
+    save("epingles");
+    return true;
+  }
+
+  function desepingler(jour) {
+    if (!epinglesDe()[jour]) return false;
+    delete state.epingles[jour];
+    save("epingles");
+    return true;
+  }
+
+  /** Construit l'entrée de menu d'un jour. Un plat épinglé prime sur le cadre du jour et
+      sur les exclusions, mais ne les CACHE jamais : il porte ses avertissements. */
+  function entreePlan(jour, r, idx, plan, epingle) {
+    const e = { jour: jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, plan) };
+    if (epingle) {
+      e.epingle = true;
+      const c = getCadre().find((x) => x.jour === jour);
+      if (c && !c.cats.includes(r.cat)) e.horsCadre = c.cats.join(" / ");
+      const exclus = (r.ingredients || [])
+        .filter((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))))
+        .map((i) => i.nom);
+      if (exclus.length) e.exclusAlerte = exclus;
+    }
+    return e;
+  }
+
   function generer() {
     const num = numSemaineISO(new Date());
     const cadre = getCadre();
     const interdites = recentes(num - 1);
     const plan = new Array(cadre.length).fill(null);
-    // jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
-    // pour que les jours souples (Express, Mijoté) s'adaptent ensuite et évitent l'adjacence.
+
+    // 1) les jours ÉPINGLÉS sont posés AVANT tout le reste : ils priment sur le cadre du
+    //    jour, sur les exclusions et sur l'historique — c'est un choix délibéré assumé.
+    //    Un nom encore absent de la base (envie en attente d'ajout) laisse le jour libre.
+    cadre.forEach((c, i) => {
+      const r = getR(nomEpingle(c.jour));
+      if (r) plan[i] = entreePlan(c.jour, r, i, plan, true);
+    });
+
+    // 2) les autres jours se génèrent autour et VOIENT les protéines déjà posées : un plat
+    //    imposé n'échappe donc pas à l'anti-répétition, il la contraint.
+    //    Jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
+    //    pour que les jours souples (Express, Mijoté) s'adaptent ensuite et évitent l'adjacence.
     const ordre = cadre.map((c, i) => {
       const cand = candidats(c, interdites);
       return { i, prot: new Set(cand.map((r) => r.proteine)).size || 99, n: cand.length };
-    }).sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
+    }).filter((o) => !plan[o.i])
+      .sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
     for (const i of ordre) {
       const r = choisir(cadre[i], interdites, plan, i);
-      if (r) plan[i] = { jour: cadre[i].jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, i, plan) };
+      if (r) plan[i] = entreePlan(cadre[i].jour, r, i, plan, false);
     }
     state.semaine = { num, plan: plan.filter(Boolean) };
     save("semaine");
@@ -228,6 +277,9 @@
     const s = state.semaine;
     const idx = s.plan.findIndex((p) => p.jour === jour);
     if (idx < 0) return;
+    // un jour épinglé est un choix explicite : on ne le tire pas au sort dans son dos.
+    // Il faut d'abord retirer l'épingle (bouton « Ne plus imposer »).
+    if (nomEpingle(jour)) return "epingle";
     const cadre = getCadre().find((c) => c.jour === jour);
     const interdites = recentes(s.num - 1);
     s.plan.forEach((p) => interdites.add(p.nom));   // exclut TOUTE la semaine, dont le plat actuel → force un vrai changement
@@ -345,7 +397,10 @@
         <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span>
           <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
         </div>
-        <div class="plat">${esc(r.nom)}</div>
+        <div class="plat">${p.epingle ? "📌 " : ""}${esc(r.nom)}</div>
+        ${p.epingle ? `<div class="epingle-info">Plat imposé par toi pour ce jour.
+          ${p.horsCadre ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}).` : ""}
+          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}</div>` : ""}
         <div class="temps">${tempsRecette(r)}</div>
         <div class="meta">${bullesRecette(r)}</div>
         ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
@@ -355,7 +410,10 @@
         ${blocRecette(r)}
         <div class="note-row">Ta note : ${etoiles(r.nom)}</div>
         <div class="actions">
-          <button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>
+          ${p.epingle
+            ? `<button data-act="desepingler" data-jour="${esc(p.jour)}">📌 Ne plus imposer</button>`
+            : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>
+               <button data-act="epingler" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}" title="Garder ce plat ce jour-là">📌 Imposer</button>`}
           <button class="fait ${estFait(s.num, p.jour) ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${estFait(s.num, p.jour) ? "✓ Fait" : "Marquer fait"}</button>
         </div>
       </div>`;
@@ -649,13 +707,28 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save("coursesCochees"); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {} };
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {} };
         save("semaine"); show("semaine");
       }
       return;
     }
     const act = t.dataset.act;
-    if (act === "regen-day") { regenJour(t.dataset.jour); return renderSemaine(); }
+    if (act === "epingler") {
+      epingler(t.dataset.jour, t.dataset.nom);
+      generer();                                  // le reste de la semaine se réorganise autour
+      renderSemaine();
+      return toast(`📌 ${t.dataset.nom} imposé ${t.dataset.jour.toLowerCase()}`);
+    }
+    if (act === "desepingler") {
+      desepingler(t.dataset.jour);
+      generer();
+      renderSemaine();
+      return toast("Plat libéré — le jour redevient automatique");
+    }
+    if (act === "regen-day") {
+      if (regenJour(t.dataset.jour) === "epingle") return toast("Ce plat est imposé — retire d'abord l'épingle");
+      return renderSemaine();
+    }
     if (act === "regen-side") {
       // repioche un accompagnement COMPATIBLE avec la catégorie du plat, et différent de l'actuel
       const p = state.semaine.plan.find((x) => x.jour === t.dataset.jour);
@@ -756,7 +829,7 @@
 
   // exposé pour les tests automatisés
   window.__mims = {
-    generer, listeCourses, estExclu, getCadre,
+    generer, listeCourses, estExclu, getCadre, epingler, desepingler,
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
     rafraichir: () => { try { RENDER[vueActive()](); } catch (e) {} },

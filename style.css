@@ -192,3 +192,11 @@ button.x:active { background: #c0532f; color: #fff; border-color: #c0532f; }
   85% { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, 6px); }
 }
+
+/* plat imposé sur un jour : l'encadré rappelle que c'est un choix délibéré
+   et affiche ce qu'il fait sauter (style du jour, ingrédient exclu). */
+.epingle-info {
+  margin: 4px 0 2px; padding: 6px 9px;
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 4px; font-size: .82rem; line-height: 1.35;
+}

@@ -9,7 +9,7 @@
 
   const CONF = "mims_sync_conf";
   // champs synchronisés entre les téléphones du foyer
-  const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies"];
+  const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies", "epingles"];
 
   let conf = charger();
   let horodatages = {};   // champ -> dernier horodatage local connu
