@@ -1,0 +1,115 @@
+[
+ {
+  "nom": "Enchiladas au poulet",
+  "url": "https://www.maspatule.com/blog/2022/09/25/recette-enchiladas-poulet/",
+  "source": "maspatule.com",
+  "demande": true,
+  "cat": "Volaille",
+  "proteine": "volaille",
+  "parts_origine": 8,
+  "prep_min": 20,
+  "cuisson_min": 30,
+  "saison": "Toute l'année",
+  "cuissons": [
+   "poêle",
+   "four"
+  ],
+  "tags": [],
+  "ingredients": [
+   {
+    "nom": "blancs de poulet",
+    "rayon": "Boucherie",
+    "qte": 2,
+    "unite": "unité"
+   },
+   {
+    "nom": "tortillas",
+    "rayon": "Épicerie",
+    "qte": 8,
+    "unite": "unité"
+   },
+   {
+    "nom": "cheddar râpé",
+    "rayon": "Crèmerie",
+    "qte": 150,
+    "unite": "g"
+   },
+   {
+    "nom": "tomates",
+    "rayon": "Fruits & légumes",
+    "qte": 3,
+    "unite": "unité"
+   },
+   {
+    "nom": "poivron",
+    "rayon": "Fruits & légumes",
+    "qte": 1,
+    "unite": "unité"
+   },
+   {
+    "nom": "oignon",
+    "rayon": "Fruits & légumes",
+    "qte": 1,
+    "unite": "unité"
+   },
+   {
+    "nom": "gousse d'ail",
+    "rayon": "Fruits & légumes",
+    "qte": 1,
+    "unite": "unité"
+   },
+   {
+    "nom": "citron vert",
+    "rayon": "Fruits & légumes",
+    "qte": 1,
+    "unite": "unité"
+   },
+   {
+    "nom": "huile d'olive",
+    "rayon": "Épicerie",
+    "qte": 2,
+    "unite": "cuillères à soupe"
+   },
+   {
+    "nom": "paprika",
+    "rayon": "Épicerie",
+    "qte": 2,
+    "unite": "cuillères à café"
+   },
+   {
+    "nom": "origan",
+    "rayon": "Épicerie",
+    "qte": 2,
+    "unite": "cuillères à café"
+   },
+   {
+    "nom": "cumin",
+    "rayon": "Épicerie",
+    "qte": 1,
+    "unite": "cuillère à café"
+   },
+   {
+    "nom": "gingembre moulu",
+    "rayon": "Épicerie",
+    "qte": 0.5,
+    "unite": "cuillère à café"
+   },
+   {
+    "nom": "piment",
+    "rayon": "Épicerie",
+    "qte": 0.5,
+    "unite": "cuillère à café"
+   }
+  ],
+  "etapes": [
+   "Hachez l'ail, émincez l'oignon et coupez le poivron en fines lamelles.",
+   "Coupez le poulet en petits morceaux ainsi que 2 tomates ; mixez la troisième et réservez au frais.",
+   "Faites revenir l'oignon et l'ail à l'huile, ajoutez le poulet et faites-le colorer.",
+   "Ajoutez les épices, puis les tomates et le poivron.",
+   "Versez le jus du citron vert et un demi-verre d'eau, couvrez et laissez cuire 10 minutes.",
+   "Répartissez la farce dans les 8 tortillas, roulez-les et rangez-les dans un plat à four.",
+   "Parsemez de tomate mixée et de cheddar râpé.",
+   "Enfournez 20 minutes à 180 °C."
+  ]
+ }
+]

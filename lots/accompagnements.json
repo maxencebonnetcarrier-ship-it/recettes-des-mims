@@ -1,0 +1,742 @@
+[
+ {
+  "nom": "Riz nature",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_riz-nature-inratable_46228.aspx",
+  "prep_min": 5,
+  "cuisson_min": 25,
+  "total_min": 30,
+  "cuissons": [
+   "casserole"
+  ],
+  "parts_origine": 6,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "riz thaï",
+    "qte": 4,
+    "unite": "verres",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "eau",
+    "qte": 5,
+    "unite": "verres",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Ne pas saler le riz avant qu'il ne soit cuit.",
+   "Respecter les proportions : 5 mesures d'eau pour 4 mesures de riz, remplies à la même hauteur.",
+   "Cuire l'ensemble dans une sauteuse large, verser riz + eau et porter à ébullition.",
+   "Décoller le riz du fond, remuer, laisser bouillir 3 à 4 min.",
+   "Couvrir hermétiquement et cuire à feu le plus doux possible pendant au moins 20 min.",
+   "Remuer le riz avec une spatule en bois pour l'aérer avant de servir."
+  ]
+ },
+ {
+  "nom": "Purée de pommes de terre maison",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_puree-de-pommes-de-terre-maison_28054.aspx",
+  "prep_min": 25,
+  "cuisson_min": 45,
+  "total_min": 70,
+  "cuissons": [
+   "casserole (eau salée)",
+   "moulin à légumes"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "pomme de terre",
+    "qte": 1,
+    "unite": "kg",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "lait",
+    "qte": 20,
+    "unite": "cl",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "crème fraîche",
+    "qte": 1,
+    "unite": "portion",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "muscade",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Éplucher et couper les pommes de terre en morceaux.",
+   "Cuire dans un grand volume d'eau salée jusqu'à ce que la pointe d'un couteau rentre facilement.",
+   "Passer au moulin à légumes.",
+   "Ajouter le lait pour délayer jusqu'à la consistance souhaitée, la crème fraîche pour l'onctuosité et une pincée de muscade râpée.",
+   "Rectifier l'assaisonnement et servir bien chaud."
+  ]
+ },
+ {
+  "nom": "Gratin dauphinois",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_gratin-dauphinois-recette-originale_22307.aspx",
+  "prep_min": 30,
+  "cuisson_min": 60,
+  "total_min": 90,
+  "cuissons": [
+   "four"
+  ],
+  "parts_origine": 5,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "pomme de terre belle de Fontenay",
+    "qte": 1,
+    "unite": "kg",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "crème liquide",
+    "qte": 1,
+    "unite": "l",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "ail",
+    "qte": 2,
+    "unite": "gousses",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Préchauffer le four à 150°C (thermostat 5).",
+   "Éplucher et couper les pommes de terre en rondelles. Presser l'ail.",
+   "Napper le fond d'un plat à gratin de crème.",
+   "Alterner une couche de pommes de terre, crème, ail, sel, poivre jusqu'à épuisement des ingrédients.",
+   "Terminer en nappant de crème, sel, poivre.",
+   "Mettre au four pendant au moins une heure."
+  ]
+ },
+ {
+  "nom": "Poêlée de légumes du marché",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_poelee-de-legumes_168934.aspx",
+  "prep_min": 10,
+  "cuisson_min": 30,
+  "total_min": 40,
+  "cuissons": [
+   "poêle"
+  ],
+  "parts_origine": 2,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "oignon",
+    "qte": 2,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "épices (curry, cumin...)",
+    "qte": 1,
+    "unite": "facultatif",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "carotte",
+    "qte": 2,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "courgette",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   }
+  ],
+  "etapes": [
+   "Faire chauffer l'huile d'olive dans une poêle. Émincer finement les oignons et les faire dorer.",
+   "Éplucher et râper les carottes, les ajouter et faire chauffer 10 min en rajoutant de l'eau régulièrement (pas d'huile).",
+   "Couper la courgette en gros dés et l'ajouter. Laisser cuire à feu moyen jusqu'à ce qu'elle soit fondante, en remuant et en ajoutant de l'eau si besoin.",
+   "Rectifier l'assaisonnement et ajouter les épices si souhaité."
+  ]
+ },
+ {
+  "nom": "Semoule / graine de couscous nature",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_la-recettes-de-semoule-pour-couscous_167241.aspx",
+  "prep_min": 45,
+  "cuisson_min": 10,
+  "total_min": 55,
+  "cuissons": [
+   "vapeur (couscoussier)"
+  ],
+  "parts_origine": 6,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "semoule fine",
+    "qte": 500,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "beurre",
+    "qte": 60,
+    "unite": "g",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "cuillère",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "cannelle en poudre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Mettre la semoule dans un saladier, recouverte d'1/2 litre d'eau bien salée et froide + 2 cuillères à soupe d'huile d'olive.",
+   "Mélanger rapidement et laisser gonfler une bonne demi-heure.",
+   "Rouler la semoule entre les mains une première fois.",
+   "La déposer dans le couscoussier au-dessus d'une eau bouillante, bien fermer et attendre 5 à 10 min que la vapeur la traverse.",
+   "Verser la semoule dans un saladier, ajouter le beurre en morceaux et bien fouetter à la fourchette.",
+   "Ajouter sel, poivre et cannelle, mélanger, laisser tiédir puis rouler une deuxième fois."
+  ]
+ },
+ {
+  "nom": "Boulgour aux petits légumes",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_boulgour-aux-petits-legumes-et-lardons_47053.aspx",
+  "prep_min": 15,
+  "cuisson_min": 45,
+  "total_min": 60,
+  "cuissons": [
+   "pilaf",
+   "poêle"
+  ],
+  "parts_origine": 2,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "lardons fumés",
+    "qte": 250,
+    "unite": "g",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "oignons",
+    "qte": 2,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "carottes",
+    "qte": 2,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "poivron rouge",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "poivron jaune",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "courgette",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "boulgour",
+    "qte": 400,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "ail",
+    "qte": 1,
+    "unite": "gousse",
+    "rayon": "Fruits & légumes"
+   }
+  ],
+  "etapes": [
+   "Faire revenir le boulgour dans un peu d'huile d'olive environ 5 min, puis le recouvrir d'eau et laisser cuire 15 à 20 min.",
+   "Couper les légumes en fines lamelles (julienne) et écraser l'ail.",
+   "Faire revenir à part les lardons et les oignons jusqu'à ce qu'ils soient bien dorés.",
+   "Une fois le boulgour cuit, y ajouter tous les ingrédients et assaisonner.",
+   "Mettre à feu doux jusqu'à ce que tous les légumes soient cuits."
+  ]
+ },
+ {
+  "nom": "Haricots verts persillés (gremolata)",
+  "source": "Journal des Femmes",
+  "url": "https://cuisine.journaldesfemmes.fr/recette/351260-haricots-verts-a-la-gremolata",
+  "prep_min": 10,
+  "cuisson_min": 10,
+  "total_min": 20,
+  "cuissons": [
+   "vapeur / eau bouillante"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "haricots verts surgelés",
+    "qte": 500,
+    "unite": "g",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "gousse d'ail",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "citron non traité",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "persil",
+    "qte": 1,
+    "unite": "quelques brins",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Laver le citron, prélever quelques zestes, presser le citron et garder le jus.",
+   "Peler et hacher l'ail. Laver, sécher et hacher le persil.",
+   "Mélanger dans un bol le zeste et le jus de citron, l'ail et le persil.",
+   "Ajouter l'huile d'olive, saler, poivrer et mélanger. Réserver.",
+   "Faire cuire les haricots verts 10 minutes à la vapeur ou à l'eau bouillante.",
+   "Disposer les haricots verts et napper de sauce gremolata. Déguster aussitôt."
+  ]
+ },
+ {
+  "nom": "Pommes de terre sautées / rissolées",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_pomme-de-terres-rissolees_18843.aspx",
+  "prep_min": 20,
+  "cuisson_min": 45,
+  "total_min": 65,
+  "cuissons": [
+   "poêle / faitout"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "beurre",
+    "qte": 1,
+    "unite": "noix",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "oignons",
+    "qte": 2,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "huile",
+    "qte": 4,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "pomme de terre",
+    "qte": 1,
+    "unite": "kg",
+    "rayon": "Fruits & légumes"
+   }
+  ],
+  "etapes": [
+   "Éplucher les pommes de terre, les rincer, les découper en dés et les essorer.",
+   "Faire fondre un mélange beurre-huile dans un faitout à feu doux avec les oignons.",
+   "Ajouter les pommes de terre, couvrir et cuire à feu doux 30 à 40 min en mélangeant régulièrement.",
+   "Passer à feu moyen ou fort sans couvercle 5 min pour bien dorer.",
+   "Servir, éventuellement parsemé d'herbes (marjolaine, origan, ciboulette)."
+  ]
+ },
+ {
+  "nom": "Riz pilaf",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_riz-pilaf_27905.aspx",
+  "prep_min": 5,
+  "cuisson_min": 35,
+  "total_min": 40,
+  "cuissons": [
+   "sauteuse"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "riz",
+    "qte": 250,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "huile ou beurre",
+    "qte": 3,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "bouillon",
+    "qte": 50,
+    "unite": "cl",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Faire chauffer l'huile dans une sauteuse, y jeter le riz et le laisser devenir transparent puis doré en remuant.",
+   "Saler, poivrer et verser le bouillon.",
+   "Porter à ébullition puis couvrir et baisser le feu au minimum.",
+   "Laisser cuire environ 20 min."
+  ]
+ },
+ {
+  "nom": "Légumes rôtis au four",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_legumes-rotis-au-four_167505.aspx",
+  "prep_min": 30,
+  "cuisson_min": 45,
+  "total_min": 75,
+  "cuissons": [
+   "four"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "huile d'olive",
+    "qte": 1,
+    "unite": "cuillère à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "thym et romarin",
+    "qte": 1,
+    "unite": "au goût",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivrons",
+    "qte": 4,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "courgettes",
+    "qte": 2,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "oignon blanc",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "oignon rouge",
+    "qte": 1,
+    "unite": "pièce(s)",
+    "rayon": "Fruits & légumes"
+   }
+  ],
+  "etapes": [
+   "Laver et couper les courgettes en cubes. Vider, laver et couper les poivrons en cubes de même taille.",
+   "Couper les oignons en quartiers.",
+   "Mélanger les légumes et les placer dans un grand plat allant au four, en couche fine.",
+   "Verser l'huile d'olive, saler, poivrer, ajouter les herbes et mélanger.",
+   "Cuire dans un four préchauffé à 220°C pendant 45 minutes.",
+   "Mélanger toutes les 10 minutes pour bien faire dorer les légumes."
+  ]
+ },
+ {
+  "nom": "Purée de patate douce",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_puree-de-patates-douces_25910.aspx",
+  "prep_min": 15,
+  "cuisson_min": 10,
+  "total_min": 25,
+  "cuissons": [
+   "ébullition + mixeur"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "patates douces",
+    "qte": 800,
+    "unite": "g",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 2,
+    "unite": "tours de moulin",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "crème fraîche",
+    "qte": 20,
+    "unite": "cl",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "zeste d'orange ou de citron",
+    "qte": 1,
+    "unite": "zeste",
+    "rayon": "Fruits & légumes"
+   }
+  ],
+  "etapes": [
+   "Éplucher les patates douces et les couper en petits morceaux.",
+   "Les faire cuire à ébullition dans une grande quantité d'eau pendant 10 min.",
+   "Passer les patates cuites au mixeur avec la crème et l'huile d'olive.",
+   "Saler, poivrer et parfumer de zestes d'agrumes à volonté."
+  ]
+ },
+ {
+  "nom": "Écrasé de pommes de terre à l'huile d'olive",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_ecrase-de-pommes-de-terre_231169.aspx",
+  "prep_min": 10,
+  "cuisson_min": 15,
+  "total_min": 25,
+  "cuissons": [
+   "vapeur"
+  ],
+  "parts_origine": 4,
+  "suits": [
+   "Volaille",
+   "Porc",
+   "Poisson",
+   "Rapide (sport)",
+   "Mijoté",
+   "Rôti"
+  ],
+  "ingredients": [
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "pomme de terre",
+    "qte": 1,
+    "unite": "kg",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "fromage frais",
+    "qte": 200,
+    "unite": "g",
+    "rayon": "Crèmerie"
+   }
+  ],
+  "etapes": [
+   "Cuire les pommes de terre à la vapeur 10 à 15 min, vérifier la cuisson avec la pointe d'un couteau.",
+   "Les écraser à l'aide d'une fourchette, en laissant des morceaux.",
+   "Ajouter le fromage frais, l'huile d'olive, le sel et le poivre.",
+   "Bien mélanger et servir."
+  ]
+ }
+]

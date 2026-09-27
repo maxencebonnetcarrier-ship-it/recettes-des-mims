@@ -426,8 +426,7 @@
         <div class="actions">
           ${p.epingle
             ? `<button data-act="desepingler" data-jour="${esc(p.jour)}">📌 Ne plus imposer</button>`
-            : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>
-               <button data-act="epingler" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}" title="Garder ce plat ce jour-là">📌 Imposer</button>`}
+            : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>`}
           <button class="fait ${estFait(s.num, p.jour) ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${estFait(s.num, p.jour) ? "✓ Fait" : "Marquer fait"}</button>
         </div>
       </div>`;
@@ -823,8 +822,19 @@
       if (!v) return;
       const jour = selJour ? selJour.value : "";
       const url = inpUrl ? (inpUrl.value || "").trim() : "";
-      if (state.envies.some((e) => norm(e && e.nom ? e.nom : e) === norm(v))) return toast("Déjà dans la liste");
-      state.envies.push({ nom: v, url: url || null, jour: jour || null });
+      // Si le plat est DÉJÀ dans la liste, on ne refuse pas : on met à jour son jour et son
+      // lien. Refuser en silence donnait un bouton « Ajouter » qui semblait mort quand on
+      // revenait préciser un jour sur une envie déjà notée.
+      const dejaI = state.envies.findIndex((e) => norm(e && e.nom ? e.nom : e) === norm(v));
+      if (dejaI >= 0) {
+        const anc = state.envies[dejaI];
+        const ancNom = anc && anc.nom ? anc.nom : anc;
+        const ancJour = anc && anc.jour;
+        if (ancJour && ancJour !== jour && nomEpingle(ancJour) === ancNom) desepingler(ancJour);
+        state.envies[dejaI] = { nom: ancNom, url: url || (anc && anc.url) || null, jour: jour || null };
+      } else {
+        state.envies.push({ nom: v, url: url || null, jour: jour || null });
+      }
       save("envies");
       // un jour choisi = épingle posée d'avance : elle restera « en attente » tant que la
       // recette n'est pas dans la base, puis s'appliquera toute seule au premier menu suivant.
