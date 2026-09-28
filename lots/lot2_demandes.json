@@ -111,5 +111,71 @@
    "Parsemez de tomate mixée et de cheddar râpé.",
    "Enfournez 20 minutes à 180 °C."
   ]
+ },
+ {
+  "nom": "Tendron de veau printanier",
+  "url": "https://www.marmiton.org/recettes/recette_tendron-de-veau-printanier_26124.aspx",
+  "source": "marmiton.org",
+  "demande": true,
+  "cat": "Mijoté",
+  "proteine": "veau",
+  "parts_origine": 4,
+  "prep_min": 10,
+  "cuisson_min": 105,
+  "saison": "Toute l'année",
+  "cuissons": [
+   "cocotte"
+  ],
+  "tags": [],
+  "ingredients": [
+   {
+    "nom": "tendron de veau",
+    "qte": 1.5,
+    "unite": "kg",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "carottes",
+    "qte": 1,
+    "unite": "kg",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "oignons",
+    "qte": 3,
+    "unite": "unité",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "bouquet garni",
+    "qte": 1,
+    "unite": "unité",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "persil",
+    "qte": 1,
+    "unite": "bouquet",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "beurre",
+    "qte": 1,
+    "unite": "noix",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "farine",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Enfariner la viande et la faire dorer sur toutes les faces dans une cocotte avec le beurre.",
+   "Ajouter les carottes et les oignons coupés en rondelles, puis le bouquet garni. Saler, poivrer.",
+   "Laisser mijoter 1 h 45 à feu doux.",
+   "Servir la viande avec les carottes, les oignons, le jus de cuisson tamisé et le persil haché."
+  ]
  }
 ]
