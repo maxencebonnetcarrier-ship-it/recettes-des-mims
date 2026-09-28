@@ -2,3 +2,9 @@
 Thumbs.db
 *.log
 node_modules/
+
+# fichiers générés automatiquement par Python à chaque exécution de build_data.py
+__pycache__/
+*.pyc
+# dossier de travail d'un outil d'analyse, propre à la machine
+.serena/
