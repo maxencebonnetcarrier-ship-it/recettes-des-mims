@@ -1,6 +1,6 @@
 /* Service worker — rend l'app utilisable hors-ligne une fois ouverte.
    Stratégie : réseau d'abord (pour recevoir les mises à jour), cache en secours. */
-const CACHE = "mims-v17";
+const CACHE = "mims-v19";
 const FICHIERS = [
   "./",
   "./index.html",
@@ -22,6 +22,10 @@ self.addEventListener("activate", (e) => {
       .then((noms) => Promise.all(noms.filter((n) => n !== CACHE).map((n) => caches.delete(n))))
       .then(() => self.clients.claim())
   );
+  // NE PAS forcer ici un self.clients.matchAll(...).navigate() pour recharger les pages
+  // ouvertes : testé le 28/09/2026, ça met la page dans une BOUCLE de rechargement
+  // infinie (page figée, plus aucun JS évaluable). Le rechargement est déclenché côté
+  // page, via « controllerchange » dans index.html, qui porte un garde-fou anti-boucle.
 });
 
 self.addEventListener("fetch", (e) => {

@@ -45,9 +45,13 @@
       // installée sur l'écran d'accueil, elle n'est quasiment jamais rechargée, donc la
       // nouveauté n'arrivait jamais. On recharge donc une fois, dès que la nouvelle version
       // prend le contrôle. Le garde-fou évite toute boucle de rechargement.
-      let dejaRecharge = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (dejaRecharge) return;
+      // On ne recharge QUE s'il s'agit d'une vraie mise à jour. À la toute première
+      // installation, la page passe aussi de « sans contrôleur » à « contrôlée » : recharger
+      // là serait un rechargement surprise pour quelqu'un qui ouvre l'app pour la 1re fois.
+      var dejaControlee = !!navigator.serviceWorker.controller;
+      var dejaRecharge = false;
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (!dejaControlee || dejaRecharge) return;
         dejaRecharge = true;
         location.reload();
       });

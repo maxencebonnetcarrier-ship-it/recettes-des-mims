@@ -24,6 +24,12 @@ Scrapées via Firecrawl depuis **3 sites spécialisés uniquement** : marmiton.o
 cuisine.journaldesfemmes.fr. Chaque recette porte son `url` source réelle, affichée dans l'app.
 Aucune recette n'est inventée : ingrédients, quantités, temps et étapes viennent du scrape.
 
+**Exception — recettes DEMANDÉES** (`"demande": true`, cf. `lots/lot2_demandes.json`) : quand
+l'utilisateur fournit lui-même un lien, **n'importe quelle source est acceptée** (ex. maspatule.com
+pour les enchiladas). Ces recettes contournent deux contrôles : catégorie hors du CADRE, et présence
+d'un ingrédient exclu par défaut. L'app le signale à l'écran quand le plat est imposé sur un jour.
+La règle des 3 sites reste entière pour les recettes que Claude cherche de sa propre initiative.
+
 ### Ajouter une recette
 1. Scraper l'URL (Firecrawl, schéma JSON dans `build_data.py`), écrire le résultat dans un `lotN.json`.
 2. `python build_data.py <dossier_des_lots> data.js`

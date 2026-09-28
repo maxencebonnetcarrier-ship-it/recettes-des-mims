@@ -202,6 +202,11 @@ def valider(recettes):
         # assumé, et l'app le signale à l'écran quand elle est imposée sur un jour. Les
         # recettes trouvées automatiquement restent soumises à toutes les règles.
         demandee = bool(r.get("demande"))
+        if not (r.get("cat") or "").strip():
+            # même demandée, une recette doit porter une catégorie : sinon l'onglet Recettes
+            # affiche une rubrique au titre vide.
+            pbs.append(f"{nom}: catégorie manquante")
+            continue
         if r.get("cat") not in cats_cadre and not demandee:
             pbs.append(f"{nom}: catégorie '{r.get('cat')}' hors cadre")
             continue

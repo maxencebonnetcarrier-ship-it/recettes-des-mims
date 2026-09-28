@@ -208,19 +208,41 @@
   /* ---------- recettes épinglées (imposées sur un jour précis) ---------- */
 
   const epinglesDe = () => state.epingles || (state.epingles = {});
-  const nomEpingle = (jour) => { const e = epinglesDe()[jour]; return e ? (e.nom || e) : null; };
+  // une entrée peut être une pierre tombale { nom: null } : un désépinglage doit se
+  // PROPAGER à l'autre téléphone, ce qu'une simple suppression ne ferait pas.
+  const nomEpingle = (jour) => {
+    const e = epinglesDe()[jour];
+    if (!e) return null;
+    return typeof e === "string" ? e : (e.nom || null);
+  };
 
-  /** Impose une recette sur un jour. Une seule par jour : la nouvelle remplace l'ancienne. */
+  /** Impose une recette sur un jour. Une seule par jour : la nouvelle remplace l'ancienne.
+      On mémorise la SEMAINE de pose : une épingle ne vaut que pour la semaine en cours. */
   function epingler(jour, nom) {
     if (!jour || !nom) return false;
-    epinglesDe()[jour] = { nom: nom, t: Date.now() };
+    epinglesDe()[jour] = { nom: nom, t: Date.now(), num: numSemaineISO(new Date()) };
     save("epingles");
     return true;
   }
 
+  /** Retire les épingles posées une semaine précédente. Sans ça, un plat imposé une fois
+      le resterait indéfiniment — l'inverse de ce qui est promis à l'utilisateur. */
+  function purgerEpingles(num) {
+    const e = epinglesDe();
+    let change = false;
+    Object.keys(e).forEach((j) => {
+      const n = e[j] && e[j].num;
+      if (typeof n !== "number" || n !== num) { delete e[j]; change = true; }
+    });
+    if (change) save("epingles");
+    return change;
+  }
+
   function desepingler(jour) {
-    if (!epinglesDe()[jour]) return false;
-    delete state.epingles[jour];
+    if (!nomEpingle(jour)) return false;
+    // pierre tombale plutôt que suppression : sinon l'autre téléphone, qui a encore
+    // l'épingle, la renverrait à la prochaine synchro et elle réapparaîtrait toute seule.
+    epinglesDe()[jour] = { nom: null, t: Date.now(), num: numSemaineISO(new Date()) };
     save("epingles");
     return true;
   }
@@ -233,12 +255,61 @@
       e.epingle = true;
       const c = getCadre().find((x) => x.jour === jour);
       if (c && !c.cats.includes(r.cat)) e.horsCadre = c.cats.join(" / ");
-      const exclus = (r.ingredients || [])
-        .filter((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))))
-        .map((i) => i.nom);
+      const exclus = ingredientsExclus(r);
       if (exclus.length) e.exclusAlerte = exclus;
     }
     return e;
+  }
+
+  const ingredientsExclus = (r) => (r.ingredients || [])
+    .filter((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))))
+    .map((i) => i.nom);
+
+  /** Signale deux jours VOISINS qui servent la même protéine. Le cas ne peut venir que
+      d'épingles (le générateur l'interdit), mais il ne doit pas passer sous silence. */
+  function marquerProteinesVoisines(plan) {
+    plan.forEach((p, i) => { if (p) delete p.protAlerte; });
+    for (let i = 1; i < plan.length; i++) {
+      const a = plan[i - 1], b = plan[i];
+      if (!a || !b || a.proteine !== b.proteine) continue;
+      const libelle = `même protéine que ${a.jour === b.jour ? "le jour voisin" : ""}`.trim();
+      a.protAlerte = `${a.proteine} aussi ${b.jour.toLowerCase()}`;
+      b.protAlerte = `${b.proteine} aussi ${a.jour.toLowerCase()}`;
+    }
+    return plan;
+  }
+
+  /** Recalcule les avertissements des jours épinglés sans retoucher au menu : appelé quand
+      les exclusions changent APRÈS coup, sinon un plat imposé garderait une alerte périmée
+      (ou n'en afficherait aucune alors qu'il contient un ingrédient fraîchement exclu). */
+  /** Après une nouvelle exclusion : remplace les plats NON épinglés devenus invalides, et
+      met à jour l'avertissement des plats épinglés (qui, eux, restent — choix assumé).
+      Renvoie le nombre de plats réellement remplacés, pour ne pas annoncer un remplacement
+      qui n'a pas eu lieu. */
+  function appliquerExclusion() {
+    if (!state.semaine) return 0;
+    let n = 0;
+    state.semaine.plan.slice().forEach((p) => {
+      const r = getR(p.nom);
+      if (!r || !estExclu(r)) return;
+      if (p.epingle) return;                    // imposé : on le garde et on l'annote
+      if (regenJour(p.jour) !== "epingle") n++;
+    });
+    rafraichirAlertes();                        // recalcule aussi les jours épinglés
+    return n;
+  }
+
+  function rafraichirAlertes() {
+    if (!state.semaine) return;
+    state.semaine.plan.forEach((p) => {
+      if (!p.epingle) return;
+      const r = getR(p.nom);
+      if (!r) return;
+      const exclus = ingredientsExclus(r);
+      if (exclus.length) p.exclusAlerte = exclus; else delete p.exclusAlerte;
+    });
+    marquerProteinesVoisines(state.semaine.plan);
+    save("semaine");
   }
 
   function generer() {
@@ -246,6 +317,9 @@
     const cadre = getCadre();
     const interdites = recentes(num - 1);
     const plan = new Array(cadre.length).fill(null);
+
+    // 0) une épingle ne vaut QUE pour la semaine où elle a été posée.
+    purgerEpingles(num);
 
     // 1) les jours ÉPINGLÉS sont posés AVANT tout le reste : ils priment sur le cadre du
     //    jour, sur les exclusions et sur l'historique — c'est un choix délibéré assumé.
@@ -268,7 +342,7 @@
       const r = choisir(cadre[i], interdites, plan, i);
       if (r) plan[i] = entreePlan(cadre[i].jour, r, i, plan, false);
     }
-    state.semaine = { num, plan: plan.filter(Boolean) };
+    state.semaine = { num, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
     save("semaine");
     return state.semaine;
   }
@@ -414,7 +488,9 @@
           <br><button class="linkbtn" data-act="desepingler" data-jour="${esc(p.jour)}">Annuler la demande</button></div>` : ""}
         ${p.epingle ? `<div class="epingle-info">Plat imposé par toi pour ce jour.
           ${p.horsCadre ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}).` : ""}
-          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}</div>` : ""}
+          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}
+          ${p.protAlerte ? `<br>⚠️ ${esc(p.protAlerte)} — deux jours de suite.` : ""}</div>`
+          : (p.protAlerte ? `<div class="epingle-info">⚠️ ${esc(p.protAlerte)} — deux jours de suite.</div>` : "")}
         <div class="temps">${tempsRecette(r)}</div>
         <div class="meta">${bullesRecette(r)}</div>
         ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
@@ -775,13 +851,10 @@
     if (act === "exclure") {
       const ing = t.dataset.ing;
       if (ajouterExclusion(ing)) {
-        // remplace les plats du menu devenus invalides
-        if (state.semaine) {
-          state.semaine.plan.slice().forEach((p) => { const r = getR(p.nom); if (r && estExclu(r)) regenJour(p.jour); });
-          save("semaine");
-        }
+        const n = appliquerExclusion();
         RENDER[vueActive()]();
-        toast(`« ${ing} » exclu — recettes remplacées`);
+        toast(n ? `« ${ing} » exclu — ${n} plat${n > 1 ? "s" : ""} remplacé${n > 1 ? "s" : ""}`
+                : `« ${ing} » exclu`);
       } else toast("Déjà dans les exclusions");
       return;
     }
@@ -821,7 +894,12 @@
       const v = (inp.value || "").trim();
       if (!v) return;
       const jour = selJour ? selJour.value : "";
-      const url = inpUrl ? (inpUrl.value || "").trim() : "";
+      let url = inpUrl ? (inpUrl.value || "").trim() : "";
+      // On n'accepte qu'une vraie adresse web : un « javascript: » ou « data: » n'a rien à
+      // faire là, et ce lien voyage jusqu'à l'autre téléphone via le hub.
+      if (url && !/^https?:\/\//i.test(url)) {
+        return toast("Le lien doit commencer par https://");
+      }
       // Si le plat est DÉJÀ dans la liste, on ne refuse pas : on met à jour son jour et son
       // lien. Refuser en silence donnait un bouton « Ajouter » qui semblait mort quand on
       // revenait préciser un jour sur une envie déjà notée.
@@ -886,6 +964,7 @@
   // exposé pour les tests automatisés
   window.__mims = {
     generer, listeCourses, estExclu, getCadre, epingler, desepingler,
+    exclure: (mot) => { if (!ajouterExclusion(mot)) return 0; return appliquerExclusion(); },
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
     rafraichir: () => { try { RENDER[vueActive()](); } catch (e) {} },

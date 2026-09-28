@@ -65,11 +65,31 @@
     return p;
   }
 
+  /** Fusion des épingles jour par jour : chaque entrée porte son propre horodatage, donc
+      deux personnes peuvent imposer des plats sur des jours différents sans s'écraser.
+      Une entrée { nom: null } est une pierre tombale : elle propage un désépinglage. */
+  function fusionnerEpingles(state, distantes) {
+    if (!distantes || typeof distantes !== "object") return false;
+    if (!state.epingles) state.epingles = {};
+    let change = false;
+    Object.keys(distantes).forEach((jour) => {
+      const d = distantes[jour];
+      if (!d || typeof d !== "object") return;
+      const local = state.epingles[jour];
+      const tLocal = (local && local.t) || 0;
+      if ((d.t || 0) > tLocal) { state.epingles[jour] = d; change = true; }
+    });
+    return change;
+  }
+
   function appliquer(distant, state) {
     let change = false;
     CHAMPS.forEach((k) => {
       const d = distant[k];
       if (!d || d.v === undefined) return;
+      // Les épingles se fusionnent JOUR par JOUR, comme les cases de courses : sinon celui
+      // qui écrit en dernier efface l'épingle que l'autre venait de poser sur un AUTRE jour.
+      if (k === "epingles") { if (fusionnerEpingles(state, d.v)) change = true; return; }
       const tLocal = horodatages[k] || 0;
       if ((d.t || 0) > tLocal) {
         state[k] = d.v;

@@ -145,6 +145,57 @@
     st.historique = avant;
   }
 
+  /* 9. Une épingle posée une SEMAINE PRÉCÉDENTE ne doit plus s'appliquer. */
+  reset();
+  if (horsCadre) {
+    M.epingler("Jeu", horsCadre.nom);
+    const st9 = M.getState();
+    const e9 = st9.epingles["Jeu"];
+    if (!e9 || typeof e9.num !== "number") ech("9. l'épingle ne mémorise pas sa semaine (champ num absent)");
+    else {
+      e9.num = e9.num - 1;                       // on la fait dater de la semaine dernière
+      const p = M.generer().plan.find((x) => x.jour === "Jeu");
+      if (p && p.epingle) ech("9. une épingle de la semaine précédente s'applique encore");
+      if (st9.epingles["Jeu"]) ech("9. l'épingle périmée n'a pas été retirée de l'état");
+    }
+  }
+
+  /* 10. Deux épingles adjacentes avec la MÊME protéine doivent être signalées. */
+  reset();
+  {
+    const prot = window.RECIPES[0].proteine;
+    const deux = window.RECIPES.filter((r) => r.proteine === prot).slice(0, 2);
+    if (deux.length < 2) res.details.note10 = "pas deux recettes de même protéine : cas 10 non testable";
+    else {
+      M.epingler("Jeu", deux[0].nom);
+      M.epingler("Ven", deux[1].nom);
+      const plan = M.generer().plan;
+      const a = plan.find((x) => x.jour === "Jeu"), b = plan.find((x) => x.jour === "Ven");
+      if (!a || !b) ech("10. un des deux jours épinglés est absent du menu");
+      else if (!a.protAlerte && !b.protAlerte) ech(`10. deux "${prot}" côte à côte sans aucun avertissement`);
+      else res.details.alerteProt = a.protAlerte || b.protAlerte;
+    }
+  }
+
+  /* 11. Exclure un ingrédient APRÈS coup doit faire apparaître l'alerte sur le plat épinglé. */
+  reset();
+  {
+    const st11 = M.getState();
+    const exclusAvant = st11.exclusions.slice();
+    const cible = window.RECIPES.find((r) => (r.ingredients || []).some((i) => /poulet/i.test(i.nom)));
+    if (cible) {
+      M.epingler("Mer", cible.nom);
+      M.generer();
+      const avant = M.getState().semaine.plan.find((x) => x.jour === "Mer");
+      if (avant && avant.exclusAlerte) ech("11. montage : l'alerte existait déjà avant l'exclusion");
+      M.exclure("poulet");                       // le geste réel de l'utilisateur
+      const apres = M.getState().semaine.plan.find((x) => x.jour === "Mer");
+      if (!apres || apres.nom !== cible.nom) ech("11. le plat épinglé a été remplacé alors qu'il est imposé");
+      else if (!apres.exclusAlerte || !apres.exclusAlerte.length) ech("11. aucune alerte après ajout de l'exclusion sur un plat épinglé");
+      st11.exclusions = exclusAvant;
+    }
+  }
+
   reset();
   Object.keys(sauvegarde).forEach((j) => M.epingler(j, sauvegarde[j].nom || sauvegarde[j]));
   res.ok = res.echecs.length === 0;
