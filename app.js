@@ -208,6 +208,37 @@
     return scored[0].r;
   }
 
+  /** Va chercher une nouvelle version sans rien effacer des données de l'utilisateur.
+      On compare le contenu réellement servi à celui en mémoire : si la base de recettes a
+      changé, on recharge. Utile quand une recette demandée vient d'être ajoutée et que
+      l'app, installée sur l'écran d'accueil, tourne encore sur l'ancienne version. */
+  async function forcerMiseAJour() {
+    try {
+      // 1) on redemande la base au serveur en court-circuitant le cache, et on la lit
+      //    VRAIMENT (compter les « nom » du texte compterait aussi les ingrédients).
+      const texte = await fetch("data.js?maj=" + Date.now(), { cache: "reload" }).then((r) => r.text());
+      const bac = {};
+      new Function("window", texte)(bac);
+      const distantes = bac.RECIPES || [];
+      const connues = new Set(RECIPES.map((r) => r.nom));
+      const changement = distantes.length > 0 &&
+        (distantes.length !== RECIPES.length || distantes.some((r) => !connues.has(r.nom)));
+
+      // 2) on demande aussi au mode hors-ligne de se mettre à jour
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+      }
+      if (!changement) return false;
+      // 3) on vide les caches (JAMAIS le localStorage : les données restent)
+      if (window.caches) { for (const n of await caches.keys()) await caches.delete(n); }
+      location.reload();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /* ---------- recettes épinglées (imposées sur un jour précis) ---------- */
 
   const epinglesDe = () => state.epingles || (state.epingles = {});
@@ -752,6 +783,10 @@
     }
     html += `<h3 class="cat-title">Données</h3>
       <p class="hint">L'historique de tes plats cuisinés est dans l'onglet 🕑 Historique.</p>
+      <p class="hint">Les nouvelles recettes et améliorations arrivent toutes seules, mais si tu
+        attends quelque chose qui ne vient pas, tu peux forcer la vérification.</p>
+      <button id="btn-maj">🔄 Chercher une mise à jour</button>
+      <p class="hint">L'app se rechargera si une nouvelle version existe. Tes données sont conservées.</p>
       <button id="btn-reset" class="linkbtn danger">Tout réinitialiser</button>`;
     el.innerHTML = html;
   }
@@ -899,6 +934,15 @@
       save("favoris");
       RENDER[vueActive()]();
       toast(estFavori(nom) ? "Ajouté aux favoris ❤️" : "Retiré des favoris");
+      return;
+    }
+    if (t.id === "btn-maj") {
+      t.disabled = true; t.textContent = "Recherche…";
+      forcerMiseAJour().then((neuf) => {
+        if (neuf) return;                        // la page se recharge d'elle-même
+        t.disabled = false; t.textContent = "🔄 Chercher une mise à jour";
+        toast("Tu as déjà la dernière version");
+      });
       return;
     }
     if (t.id === "btn-add-envie") {
