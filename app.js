@@ -49,9 +49,11 @@
     return "hiver";
   }
   function deSaison(r) {
+    if (state.saisonOff) return true;          // filtre de saison coupé : tout est permis
     const s = norm(r.saison);
     return !s || s.includes("toute") || s.includes(saisonActuelle());
   }
+  const LIBELLE_SAISON = { printemps: "printemps", ete: "été", automne: "automne", hiver: "hiver" };
   function numSemaineISO(d) {
     d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const day = d.getUTCDay() || 7;
@@ -102,6 +104,7 @@
   if (!state.envies) state.envies = [];         // plats que l'utilisateur veut voir scrapés plus tard
   if (!state.coursesCochees) state.coursesCochees = {};
   if (!state.epingles) state.epingles = {};     // jour → recette imposée pour la semaine en cours
+  if (state.saisonOff === undefined) state.saisonOff = false;  // filtre « de saison » actif par défaut
 
   const estFavori = (nom) => state.favoris.includes(nom);
   const ACC = () => window.ACCOMPAGNEMENTS || [];
@@ -451,7 +454,10 @@
 
   function renderSemaine() {
     const el = document.getElementById("view-semaine");
-    if (!state.semaine || !state.semaine.plan.length) generer();
+    // Une nouvelle semaine = un nouveau menu. Sans ce contrôle l'app restait affichée sur
+    // la semaine précédente indéfiniment (et les épingles périmées n'étaient jamais purgées,
+    // puisque c'est generer() qui s'en charge).
+    if (!state.semaine || !state.semaine.plan.length || state.semaine.num !== numSemaineISO(new Date())) generer();
     const s = state.semaine;
     let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · ${esc(plageSemaine(s.num))} · ${PARTS_CIBLE} parts/plat</div>
       <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
@@ -671,6 +677,14 @@
       html += `<span class="chip promo">${esc(e)}<button data-act="unpromo" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     html += `</div>
+      <h3 class="cat-title">☀️ Saison</h3>
+      <p class="hint">Quand c'est activé, les plats de pleine saison passent devant et les recettes
+        hors saison sont écartées. Saison détectée : <strong>${esc(LIBELLE_SAISON[saisonActuelle()])}</strong>.
+        Coupe-le pour ouvrir le choix à toute la base.</p>
+      <label class="ligne-reglage">
+        <input type="checkbox" data-act="saison" ${state.saisonOff ? "" : "checked"} />
+        Privilégier les recettes de saison
+      </label>
       <h3 class="cat-title">Ingrédients exclus</h3>
       <p class="hint">Une recette contenant un de ces ingrédients ne sera jamais proposée. ${nb}/${RECIPES.length} recettes disponibles.</p>
       <div class="add-row">
@@ -952,6 +966,14 @@
       generer(); save("cadreJours"); renderReglages();
       toast(JOURS[i] + " : " + STYLE(e.target.value).label);
       return;
+    }
+    if (e.target.dataset.act === "saison") {
+      state.saisonOff = !e.target.checked;
+      save("saisonOff");
+      generer();                                 // le menu se refait avec le nouveau filtre
+      renderReglages();
+      return toast(state.saisonOff ? "Saison ignorée — toute la base est utilisable"
+                                   : "Recettes de saison privilégiées");
     }
     if (e.target.dataset.act === "course") {
       const id = e.target.dataset.id;

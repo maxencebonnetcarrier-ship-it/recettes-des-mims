@@ -200,3 +200,10 @@ button.x:active { background: #c0532f; color: #fff; border-color: #c0532f; }
   border-left: 3px solid var(--accent); background: var(--accent-soft);
   border-radius: 4px; font-size: .82rem; line-height: 1.35;
 }
+
+/* ligne de réglage avec une case à cocher (ex. le filtre de saison) */
+.ligne-reglage {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 2px; font-size: .92rem; cursor: pointer;
+}
+.ligne-reglage input { width: 20px; height: 20px; accent-color: var(--accent); }
