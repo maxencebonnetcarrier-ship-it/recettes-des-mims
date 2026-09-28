@@ -207,3 +207,10 @@ button.x:active { background: #c0532f; color: #fff; border-color: #c0532f; }
   padding: 10px 2px; font-size: .92rem; cursor: pointer;
 }
 .ligne-reglage input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* lien vers la recette d'origine, visible directement sur la carte du jour */
+.src-carte { margin: 2px 0 6px; }
+.src-carte a {
+  color: var(--accent); font-size: .85rem; font-weight: 600;
+  text-decoration: none; border-bottom: 1px dotted var(--accent);
+}

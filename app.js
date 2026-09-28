@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 26;
+  const VERSION_APP = 27;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -576,6 +576,7 @@
           ${p.protAlerte ? `<br>⚠️ ${esc(p.protAlerte)} — deux jours de suite.` : ""}</div>`
           : (p.protAlerte ? `<div class="epingle-info">⚠️ ${esc(p.protAlerte)} — deux jours de suite.</div>` : "")}
         <div class="temps">${tempsRecette(r)}</div>
+        ${r.url ? `<div class="src-carte"><a href="${esc(r.url)}" target="_blank" rel="noopener">📖 Voir la recette sur ${esc(r.source || "le site")} ↗</a></div>` : ""}
         <div class="meta">${bullesRecette(r)}</div>
         ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
           <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement">↻</button></div>` : ""}
@@ -806,7 +807,10 @@
       const nom = e && e.nom ? e.nom : e;
       const jour = e && e.jour ? e.jour : null;
       const url = e && e.url ? e.url : null;
-      const attente = jour && !getR(nom) ? ` · en attente d'ajout` : "";
+      // même recherche souple que le menu : sinon « Tendron de veau » restait affiché
+      // « en attente » alors que « Tendron de veau printanier » est bien dans la base.
+      const trouvee = trouverRecette(nom);
+      const attente = jour && !trouvee ? ` · en attente d'ajout` : "";
       html += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${esc(attente)})</em>` : ""}${url ? " 🔗" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     html += `</div>
