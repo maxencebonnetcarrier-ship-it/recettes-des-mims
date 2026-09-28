@@ -2,6 +2,11 @@
 (function () {
   "use strict";
 
+  // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
+  // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
+  // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
+  const VERSION_APP = 24;
+
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
   const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -214,15 +219,24 @@
       l'app, installée sur l'écran d'accueil, tourne encore sur l'ancienne version. */
   async function forcerMiseAJour() {
     try {
-      // 1) on redemande la base au serveur en court-circuitant le cache, et on la lit
-      //    VRAIMENT (compter les « nom » du texte compterait aussi les ingrédients).
-      const texte = await fetch("data.js?maj=" + Date.now(), { cache: "reload" }).then((r) => r.text());
+      const t = Date.now();
+      // 1a) le CODE a-t-il changé ? On lit le numéro de version du fichier servi. Sans ce
+      //     contrôle, une amélioration qui ne touche pas les recettes restait invisible.
+      const codeServi = await fetch("app.js?maj=" + t, { cache: "reload" }).then((r) => r.text());
+      const m = codeServi.match(/VERSION_APP\s*=\s*(\d+)/);
+      const versionServie = m ? parseInt(m[1], 10) : 0;
+      const codeNeuf = versionServie > VERSION_APP;
+
+      // 1b) la BASE de recettes a-t-elle changé ? On la lit vraiment (compter les « nom »
+      //     du texte compterait aussi les ingrédients).
+      const texte = await fetch("data.js?maj=" + t, { cache: "reload" }).then((r) => r.text());
       const bac = {};
       new Function("window", texte)(bac);
       const distantes = bac.RECIPES || [];
       const connues = new Set(RECIPES.map((r) => r.nom));
-      const changement = distantes.length > 0 &&
+      const baseNeuve = distantes.length > 0 &&
         (distantes.length !== RECIPES.length || distantes.some((r) => !connues.has(r.nom)));
+      const changement = codeNeuf || baseNeuve;
 
       // 2) on demande aussi au mode hors-ligne de se mettre à jour
       if ("serviceWorker" in navigator) {
