@@ -359,8 +359,13 @@
     //    jour, sur les exclusions et sur l'historique — c'est un choix délibéré assumé.
     //    Un nom encore absent de la base (envie en attente d'ajout) laisse le jour libre.
     cadre.forEach((c, i) => {
-      const r = getR(nomEpingle(c.jour));
-      if (r) plan[i] = entreePlan(c.jour, r, i, plan, true);
+      const demande = nomEpingle(c.jour);
+      const r = trouverRecette(demande);
+      if (!r) return;
+      // la recette demandée vient d'être trouvée : on fige son vrai titre dans l'épingle,
+      // pour que l'affichage et les jours suivants ne dépendent plus du texte approximatif.
+      if (r.nom !== demande) { epinglesDe()[c.jour].nom = r.nom; save("epingles"); }
+      plan[i] = entreePlan(c.jour, r, i, plan, true);
     });
 
     // 2) les autres jours se génèrent autour et VOIENT les protéines déjà posées : un plat
@@ -399,6 +404,34 @@
   }
 
   const getR = (nom) => RECIPES.find((r) => r.nom === nom);
+
+  /** Retrouve la recette demandée pour un jour. L'utilisateur écrit ce qu'il a en tête
+      (« tendron de veau ») alors que la base porte un titre complet (« Tendron de veau
+      printanier ») : exiger l'égalité stricte laissait le jour « en attente » pour toujours.
+      On accepte donc un nom PARTIEL, mais jamais au hasard : il faut que tous les mots
+      demandés soient présents dans le titre, et une seule recette doit correspondre. */
+  function trouverRecette(nom) {
+    if (!nom) return null;
+    const exact = getR(nom);
+    if (exact) return exact;
+    const d = norm(nom).trim();
+    if (d.length < 3) return null;
+    // 1) le texte demandé tel quel dans le titre : « tendron de veau » → « Tendron de veau
+    //    printanier ». C'est le cas courant et le plus sûr.
+    let candidats = RECIPES.filter((r) => norm(r.nom).includes(d));
+    // 2) à défaut seulement, tous les mots présents mais dans le désordre.
+    if (!candidats.length) {
+      const mots = d.split(/\s+/).filter((m) => m.length > 2);
+      if (!mots.length) return null;
+      candidats = RECIPES.filter((r) => { const t = norm(r.nom); return mots.every((m) => t.includes(m)); });
+    }
+    if (candidats.length === 1) return candidats[0];
+    if (candidats.length > 1) {
+      // plusieurs titres possibles : on prend le plus court, c'est le plus proche de la demande
+      return candidats.slice().sort((a, b) => a.nom.length - b.nom.length)[0];
+    }
+    return null;
+  }
 
   // ---------- liste de courses ----------
   function listeCourses() {

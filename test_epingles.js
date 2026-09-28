@@ -196,6 +196,59 @@
     }
   }
 
+  /* 12. Une demande faite avec un nom PARTIEL doit retrouver la recette.
+        Cas réel : l'utilisateur tape « Tendron de veau », la base contient
+        « Tendron de veau printanier ». Il ne peut pas deviner le titre exact. */
+  reset();
+  {
+    // on cherche une recette dont les 2 premiers mots n'appartiennent QU'À ELLE :
+    // sinon le test mesurerait une ambiguïté réelle, pas la recherche par nom partiel.
+    // même critère que le code : le texte demandé apparaît N'IMPORTE OÙ dans le titre.
+    const sansAcc = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const deuxMots = (r) => sansAcc(r.nom.split(" ").slice(0, 2).join(" "));
+    const cible = window.RECIPES.find((r) => r.nom.split(" ").length > 2 &&
+      window.RECIPES.filter((x) => sansAcc(x.nom).includes(deuxMots(r))).length === 1);
+    if (!cible) res.details.note12 = "aucun nom partiel non ambigu : cas 12 non testable";
+    else {
+      const partiel = cible.nom.split(" ").slice(0, 2).join(" ");   // deux premiers mots
+      M.epingler("Mar", partiel);
+      const p = M.generer().plan.find((x) => x.jour === "Mar");
+      if (!p) ech("12. le mardi a disparu du menu");
+      else if (!p.epingle) ech(`12. « ${partiel} » n'a pas retrouvé « ${cible.nom} » — reste en attente à vie`);
+      else if (p.nom !== cible.nom) ech(`12. « ${partiel} » a retrouvé « ${p.nom} » au lieu de « ${cible.nom} »`);
+      res.details.nomPartiel = partiel + " -> " + (p && p.nom);
+    }
+  }
+
+  /* 12b. Nom partiel AMBIGU (plusieurs recettes correspondent) : le comportement retenu est
+         de prendre le titre le plus court, pas de laisser le jour en attente. */
+  reset();
+  {
+    const groupes = {};
+    window.RECIPES.forEach((r) => {
+      const k = r.nom.split(" ").slice(0, 2).join(" ").toLowerCase();
+      (groupes[k] = groupes[k] || []).push(r);
+    });
+    const ambigu = Object.keys(groupes).find((k) => groupes[k].length > 1);
+    if (!ambigu) res.details.note12b = "aucun nom ambigu dans la base : cas 12b non testable";
+    else {
+      const attendu = groupes[ambigu].slice().sort((a, b) => a.nom.length - b.nom.length)[0];
+      M.epingler("Mar", ambigu);
+      const p = M.generer().plan.find((x) => x.jour === "Mar");
+      if (!p || !p.epingle) ech(`12b. « ${ambigu} » (ambigu) laisse le jour en attente`);
+      else if (p.nom !== attendu.nom) ech(`12b. « ${ambigu} » a donné « ${p.nom} », attendu « ${attendu.nom} » (le plus court)`);
+      res.details.ambigu = ambigu + " -> " + (p && p.nom);
+    }
+  }
+
+  /* 13. Un nom qui ne correspond à RIEN doit rester « en attente », pas piocher au hasard. */
+  reset();
+  {
+    M.epingler("Mar", "Zzz plat totalement inexistant");
+    const p = M.generer().plan.find((x) => x.jour === "Mar");
+    if (p && p.epingle) ech(`13. un nom inexistant a été résolu vers « ${p.nom} »`);
+  }
+
   reset();
   Object.keys(sauvegarde).forEach((j) => M.epingler(j, sauvegarde[j].nom || sauvegarde[j]));
   res.ok = res.echecs.length === 0;
