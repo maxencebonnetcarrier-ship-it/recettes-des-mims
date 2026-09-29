@@ -18,6 +18,9 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `app.js` — générateur de menu, liste de courses, exclusions, rendu des 4 onglets.
 - `index.html` / `style.css` — coquille + design.
 - `test_generateur.js` — test automatisé du générateur (à exécuter dans la console navigateur).
+- `test_semaines.js` — même principe : bouton « Retirer » de l'historique et passage du Nouvel An
+  (une semaine = année ISO + numéro, champs `an` et `num`). `test_courses.js` — « Copier la liste »
+  ne recopie que les articles non cochés. Tous deux remettent à zéro l'état de l'appareil testé.
 
 ## Provenance des recettes
 Scrapées via Firecrawl depuis **3 sites spécialisés uniquement** : marmiton.org, saveurs-magazine.fr,

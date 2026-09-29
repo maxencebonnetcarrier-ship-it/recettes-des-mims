@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 27;
+  const VERSION_APP = 28;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -59,14 +59,26 @@
     return !s || s.includes("toute") || s.includes(saisonActuelle());
   }
   const LIBELLE_SAISON = { printemps: "printemps", ete: "été", automne: "automne", hiver: "hiver" };
-  function numSemaineISO(d) {
-    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const day = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - day);
-    const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d - y) / 86400000) + 1) / 7);
+
+  /* ---------- semaines ----------
+     Une semaine se repère par son ANNÉE ISO et son numéro. Le numéro seul revient chaque année,
+     et il ne suit pas l'année civile : la semaine 53 de 2026 va du 28 déc. 2026 au 3 janv. 2027.
+     Avant la v28, seul le numéro était enregistré : au Nouvel An les dates affichées sautaient
+     d'un an, les plats de fin décembre revenaient dès janvier, et une semaine 40 héritait du
+     « Fait » de la semaine 40 de l'année précédente. */
+  const JOUR_MS = 86400000, SEMAINE_MS = 7 * JOUR_MS;
+  // l'année ISO d'une semaine est celle de son JEUDI
+  function semaineDuJeudi(jeudi) {
+    const an = jeudi.getUTCFullYear();
+    return { an, num: Math.ceil((((jeudi - Date.UTC(an, 0, 1)) / JOUR_MS) + 1) / 7) };
   }
-  // Lundi de la semaine ISO donnée (année courante par défaut)
+  function semaineDe(d) {
+    const jeudi = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    jeudi.setUTCDate(jeudi.getUTCDate() + 4 - (jeudi.getUTCDay() || 7));
+    return semaineDuJeudi(jeudi);
+  }
+  const semaineCourante = () => semaineDe(new Date());
+  // Lundi de la semaine ISO donnée
   function lundiSemaineISO(num, annee) {
     const jan4 = new Date(Date.UTC(annee, 0, 4));
     const j = jan4.getUTCDay() || 7;
@@ -74,9 +86,24 @@
     const lundi = new Date(lundiS1); lundi.setUTCDate(lundiS1.getUTCDate() + (num - 1) * 7);
     return lundi;
   }
+  // Rang absolu d'une semaine (celle du lundi 5 janvier 1970 = 0) : l'écart entre deux rangs
+  // compte les semaines par-dessus le Nouvel An, ce que les numéros seuls ne savent pas faire.
+  const rangSemaine = (an, num) => Math.round((lundiSemaineISO(num, an) - Date.UTC(1970, 0, 5)) / SEMAINE_MS);
+  const semaineDuRang = (rang) => semaineDuJeudi(new Date(Date.UTC(1970, 0, 8) + rang * SEMAINE_MS));
+  const rangCourant = () => { const s = semaineCourante(); return rangSemaine(s.an, s.num); };
+  /** Rang d'une semaine ENREGISTRÉE (menu, historique, épingle). Ce qu'a écrit une version
+      antérieure à la v28 — ou l'autre téléphone pas encore à jour — n'a que le numéro : on
+      prend alors sa plus récente occurrence qui ne soit pas dans le futur. */
+  function rangDe(o) {
+    if (!o || typeof o.num !== "number") return null;
+    if (typeof o.an === "number") return rangSemaine(o.an, o.num);
+    const an = semaineCourante().an;
+    const r = rangSemaine(an, o.num);
+    return r <= rangCourant() ? r : rangSemaine(an - 1, o.num);
+  }
   const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
-  function plageSemaine(num) {
-    const lun = lundiSemaineISO(num, new Date().getFullYear());
+  function plageSemaine(an, num) {
+    const lun = lundiSemaineISO(num, an);
     const dim = new Date(lun); dim.setUTCDate(lun.getUTCDate() + 6);
     const mSame = lun.getUTCMonth() === dim.getUTCMonth();
     return mSame
@@ -152,9 +179,13 @@
   }
 
   // ---------- générateur ----------
-  function recentes(numAvant) {
+  // plats de l'historique des 3 semaines qui finissent à la semaine de rang « rangAvant »
+  function recentes(rangAvant) {
     const set = new Set();
-    state.historique.forEach((h) => { if (numAvant - h.num >= 0 && numAvant - h.num < 3) set.add(h.nom); });
+    state.historique.forEach((h) => {
+      const r = rangDe(h);
+      if (r !== null && rangAvant - r >= 0 && rangAvant - r < 3) set.add(h.nom);
+    });
     return set;
   }
 
@@ -268,19 +299,19 @@
       On mémorise la SEMAINE de pose : une épingle ne vaut que pour la semaine en cours. */
   function epingler(jour, nom) {
     if (!jour || !nom) return false;
-    epinglesDe()[jour] = { nom: nom, t: Date.now(), num: numSemaineISO(new Date()) };
+    const sem = semaineCourante();
+    epinglesDe()[jour] = { nom: nom, t: Date.now(), num: sem.num, an: sem.an };
     save("epingles");
     return true;
   }
 
   /** Retire les épingles posées une semaine précédente. Sans ça, un plat imposé une fois
       le resterait indéfiniment — l'inverse de ce qui est promis à l'utilisateur. */
-  function purgerEpingles(num) {
+  function purgerEpingles(rang) {
     const e = epinglesDe();
     let change = false;
     Object.keys(e).forEach((j) => {
-      const n = e[j] && e[j].num;
-      if (typeof n !== "number" || n !== num) { delete e[j]; change = true; }
+      if (rangDe(e[j]) !== rang) { delete e[j]; change = true; }
     });
     if (change) save("epingles");
     return change;
@@ -290,7 +321,8 @@
     if (!nomEpingle(jour)) return false;
     // pierre tombale plutôt que suppression : sinon l'autre téléphone, qui a encore
     // l'épingle, la renverrait à la prochaine synchro et elle réapparaîtrait toute seule.
-    epinglesDe()[jour] = { nom: null, t: Date.now(), num: numSemaineISO(new Date()) };
+    const sem = semaineCourante();
+    epinglesDe()[jour] = { nom: null, t: Date.now(), num: sem.num, an: sem.an };
     save("epingles");
     return true;
   }
@@ -361,13 +393,14 @@
   }
 
   function generer() {
-    const num = numSemaineISO(new Date());
+    const sem = semaineCourante();
+    const rang = rangSemaine(sem.an, sem.num);
     const cadre = getCadre();
-    const interdites = recentes(num - 1);
+    const interdites = recentes(rang - 1);
     const plan = new Array(cadre.length).fill(null);
 
     // 0) une épingle ne vaut QUE pour la semaine où elle a été posée.
-    purgerEpingles(num);
+    purgerEpingles(rang);
 
     // 1) les jours ÉPINGLÉS sont posés AVANT tout le reste : ils priment sur le cadre du
     //    jour, sur les exclusions et sur l'historique — c'est un choix délibéré assumé.
@@ -395,7 +428,7 @@
       const r = choisir(cadre[i], interdites, plan, i);
       if (r) plan[i] = entreePlan(cadre[i].jour, r, i, plan, false);
     }
-    state.semaine = { num, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
+    state.semaine = { num: sem.num, an: sem.an, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
     save("semaine");
     return state.semaine;
   }
@@ -408,7 +441,7 @@
     // Il faut d'abord retirer l'épingle (bouton « Ne plus imposer »).
     if (nomEpingle(jour)) return "epingle";
     const cadre = getCadre().find((c) => c.jour === jour);
-    const interdites = recentes(s.num - 1);
+    const interdites = recentes(rangDe(s) - 1);
     s.plan.forEach((p) => interdites.add(p.nom));   // exclut TOUTE la semaine, dont le plat actuel → force un vrai changement
     const copie = s.plan.slice(); copie[idx] = null;
     let r = choisir(cadre, interdites, copie, idx);
@@ -484,7 +517,12 @@
   // ---------- rendu ----------
   const badge = (t, c) => `<span class="badge ${c || ""}">${esc(t)}</span>`;
 
-  const estFait = (num, jour) => state.historique.some((h) => h.num === num && h.jour === jour && h.fait);
+  // entrée d'historique du jour « jour » de la semaine « semaine » (même année ET même numéro)
+  const entreeHistorique = (semaine, jour) => {
+    const rang = rangDe(semaine);
+    return state.historique.find((h) => h.jour === jour && rangDe(h) === rang);
+  };
+  const estFait = (semaine, jour) => { const h = entreeHistorique(semaine, jour); return !!(h && h.fait); };
 
   // widget de note en DEMI-étoiles (0,5 à 5)
   function etoiles(nom) {
@@ -535,9 +573,10 @@
     // Une nouvelle semaine = un nouveau menu. Sans ce contrôle l'app restait affichée sur
     // la semaine précédente indéfiniment (et les épingles périmées n'étaient jamais purgées,
     // puisque c'est generer() qui s'en charge).
-    if (!state.semaine || !state.semaine.plan.length || state.semaine.num !== numSemaineISO(new Date())) generer();
+    if (!state.semaine || !state.semaine.plan.length || rangDe(state.semaine) !== rangCourant()) generer();
     const s = state.semaine;
-    let html = `<div class="week-head"><strong>Semaine ${s.num}</strong> · ${esc(plageSemaine(s.num))} · ${PARTS_CIBLE} parts/plat</div>
+    const sem = semaineDuRang(rangDe(s));
+    let html = `<div class="week-head"><strong>Semaine ${sem.num}</strong> · ${esc(plageSemaine(sem.an, sem.num))} · ${PARTS_CIBLE} parts/plat</div>
       <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
     // on parcourt le CADRE (et non le plan) pour rendre visible un jour sans plat possible
     getCadre().forEach((cadre) => {
@@ -588,12 +627,18 @@
           ${p.epingle
             ? `<button data-act="desepingler" data-jour="${esc(p.jour)}">📌 Ne plus imposer</button>`
             : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>`}
-          <button class="fait ${estFait(s.num, p.jour) ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${estFait(s.num, p.jour) ? "✓ Fait" : "Marquer fait"}</button>
+          <button class="fait ${estFait(s, p.jour) ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${estFait(s, p.jour) ? "✓ Fait" : "Marquer fait"}</button>
         </div>
       </div>`;
     });
     el.innerHTML = html + `</div>`;
   }
+
+  // identifiant de la case à cocher d'un article (et d'un « p'tit plus ») : l'écran ET la liste
+  // copiée le lisent, ils doivent donc le calculer de la même façon
+  const idArticle = (rayon, nom) => norm(rayon + "|" + nom);
+  const idPlus = (plat) => norm("plus|" + plat);
+  const estCoche = (id) => !!state.coursesCochees[id];
 
   function renderCourses() {
     const el = document.getElementById("view-courses");
@@ -606,8 +651,8 @@
       html += `<h3 class="cat-title">${esc(rayon)}</h3><div class="shop-list">`;
       items.forEach((it) => {
         n++;
-        const id = norm(rayon + "|" + it.nom);
-        const ok = !!state.coursesCochees[id];
+        const id = idArticle(rayon, it.nom);
+        const ok = estCoche(id);
         html += `<label class="shop-row ${ok ? "checked" : ""}">
           <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
           <span class="sn">${esc(it.nom)}</span>
@@ -626,8 +671,8 @@
       html += `<h3 class="cat-title">✨ Pour sublimer (optionnel)</h3>
         <p class="hint">Pas indispensable — juste le petit truc en plus.</p><div class="shop-list">`;
       plus.forEach((it) => {
-        const id = norm("plus|" + it.plat);
-        const ok = !!state.coursesCochees[id];
+        const id = idPlus(it.plat);
+        const ok = estCoche(id);
         html += `<label class="shop-row optionnel ${ok ? "checked" : ""}">
           <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
           <span class="sn">${esc(it.quoi)}</span>
@@ -641,21 +686,26 @@
     el.innerHTML = `<div class="week-head"><strong>${n} articles</strong></div>` + html;
   }
 
+  /** Texte de « Copier la liste » : seulement ce qui RESTE à acheter. L'écran dit « Coche ce
+      que tu as déjà » — recopier aussi les articles cochés les renvoyait dans le panier.
+      Renvoie "" quand tout est coché. */
   function texteCourses() {
     const acc = listeCourses();
-    let out = "🛒 Liste de courses\n";
+    let out = "🛒 Liste de courses\n", n = 0;
     ORDRE_RAYONS.filter((r) => acc[r]).forEach((rayon) => {
+      const reste = Object.values(acc[rayon]).filter((it) => !estCoche(idArticle(rayon, it.nom)))
+        .sort((a, b) => a.nom.localeCompare(b.nom));
+      if (!reste.length) return;
       out += `\n— ${rayon} —\n`;
-      Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom))
-        .forEach((it) => { out += `• ${it.nom}\n`; });
+      reste.forEach((it) => { out += `• ${it.nom}\n`; n++; });
     });
     const plus = (state.semaine ? state.semaine.plan : [])
-      .map((p) => getR(p.nom)).filter((r) => r && r.bonus);
+      .map((p) => getR(p.nom)).filter((r) => r && r.bonus && !estCoche(idPlus(r.nom)));
     if (plus.length) {
       out += `\n— Pour sublimer (optionnel) —\n`;
-      plus.forEach((r) => { out += `• ${r.bonus} (${r.nom})\n`; });
+      plus.forEach((r) => { out += `• ${r.bonus} (${r.nom})\n`; n++; });
     }
-    return out;
+    return n ? out : "";
   }
 
   function renderRecettes() {
@@ -701,12 +751,13 @@
     const moy = notes.length ? (notes.reduce((a, b) => a + b, 0) / notes.length).toFixed(1) : null;
     let html = `<div class="week-head"><strong>${faits.length} plat${faits.length > 1 ? "s" : ""} cuisiné${faits.length > 1 ? "s" : ""}</strong>${moy ? ` · note moyenne ${moy}/5` : ""}</div>
       <p class="hint">Un plat cuisiné ne revient pas avant 3 semaines. Les mieux notés reviennent en priorité.</p>`;
-    // groupé par semaine, plus récent d'abord
+    // groupé par semaine (année comprise : deux « semaine 40 » ne se mélangent pas), plus récent d'abord
     const parSem = {};
-    faits.forEach((h) => { (parSem[h.num] = parSem[h.num] || []).push(h); });
-    Object.keys(parSem).map(Number).sort((a, b) => b - a).forEach((num) => {
-      html += `<h3 class="cat-title">Semaine ${num} · ${esc(plageSemaine(num))}</h3><div class="cards">`;
-      parSem[num].sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)).forEach((h) => {
+    faits.forEach((h) => { const r = rangDe(h); if (r !== null) (parSem[r] = parSem[r] || []).push(h); });
+    Object.keys(parSem).map(Number).sort((a, b) => b - a).forEach((rang) => {
+      const sem = semaineDuRang(rang);
+      html += `<h3 class="cat-title">Semaine ${sem.num} · ${esc(plageSemaine(sem.an, sem.num))}</h3><div class="cards">`;
+      parSem[rang].sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)).forEach((h) => {
         const r = getR(h.nom);
         html += `<div class="card hist">
           <div class="card-top"><span class="jour">${esc(h.jour)}</span>
@@ -716,7 +767,7 @@
           <div class="note-row">Ta note : ${etoiles(h.nom)}</div>
           <div class="actions">
             ${r && r.url ? `<a class="btn-link" href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette ↗</a>` : ""}
-            <button data-act="del-hist" data-nom="${esc(h.nom)}" data-num="${h.num}">Retirer</button>
+            <button data-act="del-hist" data-nom="${esc(h.nom)}" data-rang="${rang}">Retirer</button>
           </div>
         </div>`;
       });
@@ -888,7 +939,9 @@
       return;
     }
     if (t.id === "btn-copy") {
-      navigator.clipboard.writeText(texteCourses()).then(() => toast("Liste copiée")).catch(() => toast("Copie impossible"));
+      const texte = texteCourses();
+      if (!texte) return toast("Tout est déjà coché — rien à copier");
+      navigator.clipboard.writeText(texte).then(() => toast("Liste copiée")).catch(() => toast("Copie impossible"));
       return;
     }
     if (t.id === "btn-sync-on") {
@@ -960,10 +1013,11 @@
     }
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save("exclusions"); return renderReglages(); }
     if (act === "fait") {
-      const num = state.semaine.num, jour = t.dataset.jour, nom = t.dataset.nom;
-      const h = state.historique.find((x) => x.num === num && x.jour === jour);
-      if (h) { h.fait = !h.fait; h.nom = nom; }
-      else state.historique.push({ num, jour, nom, fait: true, note: state.notes[nom] || 0 });
+      const sem = semaineDuRang(rangDe(state.semaine)), jour = t.dataset.jour, nom = t.dataset.nom;
+      const h = entreeHistorique(state.semaine, jour);
+      // l'année est (ré)écrite à chaque passage : une entrée de l'ancien format se met à niveau
+      if (h) { h.fait = !h.fait; h.nom = nom; h.num = sem.num; h.an = sem.an; }
+      else state.historique.push({ num: sem.num, an: sem.an, jour, nom, fait: true, note: state.notes[nom] || 0 });
       save("historique"); renderSemaine();
       return;
     }
@@ -1048,8 +1102,10 @@
       return;
     }
     if (act === "del-hist") {
-      state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && h.num === +t.dataset.num));
-      save("historique"); return renderReglages();
+      state.historique = state.historique.filter((h) => !(h.nom === t.dataset.nom && rangDe(h) === +t.dataset.rang));
+      // le bouton vit dans l'onglet Historique : c'est LUI qu'il faut redessiner (redessiner
+      // Réglages laissait la carte à l'écran jusqu'au prochain changement d'onglet)
+      save("historique"); return renderHistorique();
     }
   });
 
