@@ -18,7 +18,8 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `app.js` — générateur de menu, liste de courses, exclusions, rendu des 4 onglets.
 - `index.html` / `style.css` — coquille + design.
 - `test_generateur.js` — test automatisé du générateur (à exécuter dans la console navigateur).
-- `test_semaines.js` — même principe : bouton « Retirer » de l'historique et passage du Nouvel An
+- `test_semaines.js` — même principe : bouton « Retirer » de l'historique, passage du Nouvel An, et règle
+  des 3 semaines sans « Marquer fait »
   (une semaine = année ISO + numéro, champs `an` et `num`). `test_courses.js` — « Copier la liste »
   ne recopie que les articles non cochés. Tous deux remettent à zéro l'état de l'appareil testé.
 
@@ -45,7 +46,9 @@ La règle des 3 sites reste entière pour les recettes que Claude cherche de sa 
 - **Anti-répétition par PROTÉINE** (et non par nom de recette) : jamais la même protéine deux jours
   consécutifs, et pas plus de 2 fois dans la semaine. C'est la règle qui empêche « bavette / bourguignon /
   rôti de bœuf » trois soirs de suite.
-- Pas deux fois la même recette sur 3 semaines (via l'historique).
+- Pas deux fois la même recette sur 3 semaines. Le dernier menu affiché d'une semaine terminée compte
+  d'office (champ `servis`, partagé par la synchro) : la règle ne dépend pas de « Marquer fait ».
+  L'historique « Marquer fait » compte aussi, mais n'est jamais rempli automatiquement.
 - Légumes de saison (saison déduite du mois courant).
 - Pas deux fois la même saveur dominante dans la semaine.
 - **Exclusions** : `EXCLUS_DEFAUT` (abats, tomate, champignon, sucré-salé) + celles que l'utilisateur

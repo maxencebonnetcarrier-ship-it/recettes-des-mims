@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 28;
+  const VERSION_APP = 29;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -137,6 +137,7 @@
   if (!state.coursesCochees) state.coursesCochees = {};
   if (!state.epingles) state.epingles = {};     // jour → recette imposée pour la semaine en cours
   if (state.saisonOff === undefined) state.saisonOff = false;  // filtre « de saison » actif par défaut
+  if (!Array.isArray(state.servis)) state.servis = [];  // menus des semaines passées : { an, num, noms }
 
   const estFavori = (nom) => state.favoris.includes(nom);
   const ACC = () => window.ACCOMPAGNEMENTS || [];
@@ -179,14 +180,40 @@
   }
 
   // ---------- générateur ----------
-  // plats de l'historique des 3 semaines qui finissent à la semaine de rang « rangAvant »
+  // plats à écarter : ceux des 3 semaines qui finissent à la semaine de rang « rangAvant ».
+  // Deux sources : les menus SERVIS (notés d'office au changement de semaine, voir
+  // noterMenuServi) et l'historique (« Marquer fait »).
   function recentes(rangAvant) {
     const set = new Set();
-    state.historique.forEach((h) => {
-      const r = rangDe(h);
-      if (r !== null && rangAvant - r >= 0 && rangAvant - r < 3) set.add(h.nom);
+    const dansFenetre = (o) => { const r = rangDe(o); return r !== null && rangAvant - r >= 0 && rangAvant - r < 3; };
+    state.historique.forEach((h) => { if (dansFenetre(h)) set.add(h.nom); });
+    (Array.isArray(state.servis) ? state.servis : []).forEach((s) => {
+      if (dansFenetre(s) && Array.isArray(s.noms)) s.noms.forEach((n) => set.add(n));
     });
     return set;
+  }
+
+  /** Au CHANGEMENT de semaine, le dernier menu affiché compte d'office comme servi. Avant la
+      v29, la règle « pas deux fois en 3 semaines » ne voyait que les plats marqués « Fait » :
+      sans ce clic, environ 3 plats sur 7 revenaient dès la semaine suivante (mesuré : 103
+      reprises sur 30 menus). Un menu remplacé en cours de semaine (« Générer », « Changer »)
+      ne compte pas. L'historique n'est PAS touché : il reste la liste de ce qui a vraiment été
+      cuisiné, avec les notes. Le champ `servis` est partagé par la synchro (sync.js). */
+  function noterMenuServi(rang) {
+    const s = state.semaine;
+    const r = rangDe(s);
+    if (r === null || r >= rang || !s.plan || !s.plan.length) return;
+    // on ne garde que ce que la règle regarde encore : les 3 semaines précédentes
+    const garde = (Array.isArray(state.servis) ? state.servis : []).filter((x) => {
+      const rx = rangDe(x);
+      return rx !== null && rx !== r && rang - rx <= 3;
+    });
+    if (rang - r <= 3) {
+      const sem = semaineDuRang(r);
+      garde.push({ an: sem.an, num: sem.num, noms: s.plan.map((p) => p && p.nom).filter(Boolean) });
+    }
+    state.servis = garde;
+    save("servis");
   }
 
   function candidats(cadre, interdites) {
@@ -395,6 +422,8 @@
   function generer() {
     const sem = semaineCourante();
     const rang = rangSemaine(sem.an, sem.num);
+    // le menu d'une semaine TERMINÉE est noté avant d'être remplacé
+    noterMenuServi(rang);
     const cadre = getCadre();
     const interdites = recentes(rang - 1);
     const plan = new Array(cadre.length).fill(null);
@@ -964,7 +993,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save("coursesCochees"); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {} };
+        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {}, servis: [] };
         save("semaine"); show("semaine");
       }
       return;
