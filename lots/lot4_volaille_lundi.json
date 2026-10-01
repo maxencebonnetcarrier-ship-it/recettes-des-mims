@@ -1,0 +1,268 @@
+[
+ {
+  "nom": "Escalopes de poulet au vinaigre balsamique",
+  "cat": "Volaille",
+  "proteine": "volaille",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_escalopes-de-poulet-au-vinaigre-balsamique_38997.aspx",
+  "prep_min": 30,
+  "cuisson_min": 0,
+  "total_min": 30,
+  "cuissons": [
+   "poêle"
+  ],
+  "parts_origine": 4,
+  "saison": "Toute l'année",
+  "tags": [],
+  "ingredients": [
+   {
+    "nom": "lardons fumés",
+    "qte": 200,
+    "unite": "g",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "oignon",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "crème fraîche",
+    "qte": 4,
+    "unite": "cuillères à soupe",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "vinaigre balsamique",
+    "qte": 15,
+    "unite": "cl",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "escalopes de poulet",
+    "qte": 4,
+    "unite": "",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "eau",
+    "qte": 1,
+    "unite": "verre",
+    "rayon": "Épicerie"
+   }
+  ],
+  "etapes": [
+   "Dans une poêle à frire, faire revenir les lardons et réserver.",
+   "Dans la graisse des lardons, faire frire l'oignon émincé, et réserver.",
+   "Faire revenir les escalopes (toujours dans la même poêle) et réserver.",
+   "Déglacer la poêle avec le vinaigre. Une fois réduit, ajouter l'eau, la crème fraîche, les lardons, les oignons et le poulet.",
+   "Laisser mijoter, jusqu'à ce que le poulet soit cuit."
+  ]
+ },
+ {
+  "nom": "Cordon bleu",
+  "cat": "Volaille",
+  "proteine": "volaille",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_cordon-bleu_27731.aspx",
+  "prep_min": 10,
+  "cuisson_min": 8,
+  "total_min": 18,
+  "cuissons": [
+   "poêle"
+  ],
+  "parts_origine": 4,
+  "saison": "Toute l'année",
+  "tags": [],
+  "ingredients": [
+   {
+    "nom": "beurre",
+    "qte": 20,
+    "unite": "g",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "farine",
+    "qte": 4,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "blancs de poulet",
+    "qte": 4,
+    "unite": "tranches",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "bacon",
+    "qte": 8,
+    "unite": "tranches",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "toastinettes",
+    "qte": 4,
+    "unite": "tranches",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "chapelure",
+    "qte": 4,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "oeuf",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Crèmerie"
+   }
+  ],
+  "etapes": [
+   "Dans chaque tranche de poulet mettre deux tranches de bacon l'une à côté de l'autre et poser dessus une tranche de fromage.",
+   "Refermer le tout en pliant la tranche en deux.",
+   "Prévoir 3 assiettes et mettre dedans la farine, l'oeuf battu et la chapelure. Tremper chaque escalope d'abord dans la farine,",
+   "puis dans l'oeuf",
+   "et pour finir dans la chapelure.",
+   "Les faire cuire quelques minutes de chaque côté dans une poêle avec un peu de beurre.",
+   "Déguster immédiatement."
+  ]
+ },
+ {
+  "nom": "Aiguillettes de poulet aux poivrons",
+  "cat": "Volaille",
+  "proteine": "volaille",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_aiguillettes-de-poulet-aux-poivrons_56942.aspx",
+  "prep_min": 5,
+  "cuisson_min": 30,
+  "total_min": 35,
+  "cuissons": [
+   "poêle"
+  ],
+  "parts_origine": 2,
+  "saison": "Printemps-été",
+  "tags": [],
+  "ingredients": [
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "crème fraîche",
+    "qte": 25,
+    "unite": "cl",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "poivrons",
+    "qte": 2,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "curry",
+    "qte": 2,
+    "unite": "pincées",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "aiguillettes de poulet",
+    "qte": 6,
+    "unite": "",
+    "rayon": "Boucherie"
+   }
+  ],
+  "etapes": [
+   "Commencer par laver et couper les poivrons en petits morceaux.",
+   "Les faire revenir dans une poêle avec l'huile d'olive, à feu moyen pendant 15 min jusqu'à ce qu'ils soient presque mou.",
+   "Lorsque les poivrons arrivent à ce stade, y mettre les aiguillettes et laisser cuire, en les retournant de temps en temps, environ 10 min, toujours à feu moyen.",
+   "Lorsque tout est cuit, baisser le feu, y mettre le crème fraiche, la delayer et y mettre le curry autant que vous voulez selon votre goût.",
+   "Saler et poivrer.",
+   "Servir."
+  ]
+ },
+ {
+  "nom": "Penne au poulet sauce pesto",
+  "cat": "Volaille",
+  "proteine": "volaille",
+  "source": "Marmiton",
+  "url": "https://www.marmiton.org/recettes/recette_penne-au-poulet-sauce-pesto_48841.aspx",
+  "prep_min": 10,
+  "cuisson_min": 15,
+  "total_min": 25,
+  "cuissons": [
+   "poêle",
+   "casserole"
+  ],
+  "parts_origine": 4,
+  "saison": "Toute l'année",
+  "tags": [],
+  "ingredients": [
+   {
+    "nom": "huile d'olive",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "pesto",
+    "qte": 1,
+    "unite": "pot",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "crème fraîche",
+    "qte": 30,
+    "unite": "cl",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "penne",
+    "qte": 500,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "blancs de poulet",
+    "qte": 400,
+    "unite": "g",
+    "rayon": "Boucherie"
+   }
+  ],
+  "etapes": [
+   "Couper les blancs de poulet en cube, les faire revenir dans de l'huile d'olive (ne pas trop les colorer).",
+   "Saler, poivrer.",
+   "Ajouter la sauce pesto, remuer, rajouter la crème fraîche, et laisser mijoter 10 minutes.",
+   "Faire cuire les pâtes et mélanger avec le poulet au pesto.",
+   "Déguster."
+  ]
+ }
+]

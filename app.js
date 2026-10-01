@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 30;
+  const VERSION_APP = 31;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -39,12 +39,6 @@
     if (m < 60) return `${m} min`;
     const h = Math.floor(m / 60), r = m % 60;
     return r ? `${h} h ${r}` : `${h} h`;
-  }
-  function tempsRecette(r) {
-    const total = r.total_min || ((r.prep_min || 0) + (r.cuisson_min || 0));
-    let d = `⏱️ ${fmtDuree(total)}`;
-    if (r.prep_min && r.cuisson_min) d += ` (prépa ${fmtDuree(r.prep_min)} + cuisson ${fmtDuree(r.cuisson_min)})`;
-    return d;
   }
   function saisonActuelle() {
     const m = new Date().getMonth();
@@ -544,7 +538,47 @@
   }
 
   // ---------- rendu ----------
-  const badge = (t, c) => `<span class="badge ${c || ""}">${esc(t)}</span>`;
+  /* Design « Chez les Mim's » (v31, choisi sur maquettes le 01/10/2026) : papier, titres en
+     serif, ornements centrés, accent terracotta. Les pictos sont dessinés en SVG au lieu
+     d'emoji : un emoji change d'aspect d'un téléphone à l'autre et ignore la couleur du thème. */
+  const SVG = (corps, taille, epais) =>
+    `<svg width="${taille}" height="${taille}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${epais}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${corps}</svg>`;
+  const COEUR = "M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z";
+  const icoCoeur = (plein) => SVG(`<path d="${COEUR}"${plein ? ' fill="currentColor"' : ""}/>`, 20, 1.8);
+  const icoCoche = SVG('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 14, 2.6);
+  const icoLoupe = SVG('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', 17, 1.9);
+  const icoCopier = SVG('<path d="M9 3.5h6v3H9z"/><path d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v13A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 17.5 5H15"/>', 18, 1.8);
+
+  const JOURS_LONG = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+  // rang du jour courant dans JOURS (lundi = 0)
+  const indexAujourdhui = () => (new Date().getDay() + 6) % 7;
+  // numéro dans le mois du i-ème jour (lundi = 0) de la semaine { an, num }
+  function quantieme(sem, i) {
+    const d = lundiSemaineISO(sem.num, sem.an);
+    d.setUTCDate(d.getUTCDate() + i);
+    return d.getUTCDate();
+  }
+  const ornement = (texte) => `<div class="orn"><i></i>${texte}<i></i></div>`;
+  // en-tête commun aux onglets : ornement, nom de l'app, ligne d'information
+  const enTete = (orn, ligne, classe) =>
+    `<div class="vue-tete">${ornement(orn)}<div class="titre">Chez les Mim's</div>${ligne ? `<div class="${classe || "sous"}">${ligne}</div>` : ""}</div>`;
+
+  const dureeTotale = (r) => r.total_min || ((r.prep_min || 0) + (r.cuisson_min || 0));
+  const detailDuree = (r) => (r.prep_min && r.cuisson_min) ? `prépa ${fmtDuree(r.prep_min)} + cuisson ${fmtDuree(r.cuisson_min)}` : "";
+  // modes de cuisson en clair : « four ou air fryer », « cocotte · four »
+  function cuissonsTexte(r) {
+    const c = (r.cuissons || []).join(" · ");
+    if (!r.air_fryer) return c;
+    return c ? `${c} ou air fryer` : "air fryer";
+  }
+
+  /* Redessiner un onglet referme ses dépliants. On rouvre ceux qui étaient ouverts (repérés par
+     data-cle) : sans ça, « Marquer fait » dans un jour déplié refermait aussitôt ce jour. */
+  function redessiner(el, html) {
+    const ouverts = new Set([...el.querySelectorAll("details[data-cle][open]")].map((d) => d.dataset.cle));
+    el.innerHTML = html;
+    if (ouverts.size) el.querySelectorAll("details[data-cle]").forEach((d) => { if (ouverts.has(d.dataset.cle)) d.open = true; });
+  }
 
   // entrée d'historique du jour « jour » de la semaine « semaine » (même année ET même numéro)
   const entreeHistorique = (semaine, jour) => {
@@ -552,6 +586,11 @@
     return state.historique.find((h) => h.jour === jour && rangDe(h) === rang);
   };
   const estFait = (semaine, jour) => { const h = entreeHistorique(semaine, jour); return !!(h && h.fait); };
+
+  function btnFavori(nom) {
+    const on = estFavori(nom);
+    return `<button class="fav ${on ? "on" : ""}" data-act="fav" data-nom="${esc(nom)}" title="J'aime — à reproposer" aria-label="${on ? "Retirer des favoris" : "Ajouter aux favoris"}">${icoCoeur(on)}</button>`;
+  }
 
   // widget de note en DEMI-étoiles (0,5 à 5)
   function etoiles(nom) {
@@ -571,14 +610,8 @@
     return h;
   }
 
-  // bulles d'une recette : modes de cuisson (dont air fryer)
-  function bullesRecette(r) {
-    let out = (r.cuissons || []).map((c) => badge("🔥 " + c, "cuisson")).join(" ");
-    if (r.air_fryer) out += " " + badge("🍟 air fryer", "airfryer");
-    return out;
-  }
-
-  function blocRecette(r) {
+  // ingrédients (mis à l'échelle), étapes et lien source d'une recette
+  function corpsRecette(r) {
     const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
     const ingr = r.ingredients.map((i) => {
       const q = i.qte ? `${Math.round(i.qte * facteur * 10) / 10}${i.unite ? " " + i.unite : ""} ` : "";
@@ -586,15 +619,91 @@
         <button class="x" data-act="exclure" data-ing="${esc(i.nom)}" title="Je n'aime pas — exclure">✕</button></li>`;
     }).join("");
     const etapes = (r.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
-    return `<details class="detail">
-      <summary>Ingrédients, étapes &amp; source</summary>
-      <div class="det-body">
-        <p class="det-t">Pour ${PARTS_CIBLE} parts</p>
+    return `<p class="det-t">Pour ${PARTS_CIBLE} parts</p>
         <ul class="ing-list">${ingr}</ul>
         ${etapes ? `<p class="det-t">Préparation</p><ol class="step-list">${etapes}</ol>` : ""}
-        ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}
-      </div>
+        ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}`;
+  }
+  const blocRecette = (r, cle, fin) => `<details class="detail" data-cle="${esc(cle)}">
+      <summary>Ingrédients, étapes &amp; source</summary>
+      <div class="det-body">${corpsRecette(r)}${fin || ""}</div>
     </details>`;
+
+  // titre du plat d'un jour, ou ce qui le remplace quand le jour est vide
+  function nomDuJour(cadre, p, r) {
+    if (r) return `${p.epingle ? "📌 " : ""}${esc(r.nom)}`;
+    const attendu = nomEpingle(cadre.jour);
+    return attendu ? `📌 ${esc(attendu)}` : "Aucun plat ne correspond";
+  }
+  // durée, accompagnement, p'tit plus, lien et boutons du plat d'un jour
+  function corpsJour(p, r, cadre, s) {
+    const fait = estFait(s, p.jour);
+    const attendu = nomEpingle(cadre.jour);
+    let alerte = "";
+    if (!p.epingle && attendu) {
+      alerte = `<div class="epingle-info">📌 Tu as demandé <strong>${esc(attendu)}</strong> pour ce jour.
+          En attendant qu'il soit ajouté à ta base, voici une proposition.
+          <br><button class="linkbtn" data-act="desepingler" data-jour="${esc(p.jour)}">Annuler la demande</button></div>`;
+    } else if (p.epingle) {
+      alerte = `<div class="epingle-info">Plat imposé par toi pour ce jour.
+          ${p.horsCadre ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}).` : ""}
+          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}
+          ${p.protAlerte ? `<br>⚠️ ${esc(p.protAlerte)} — deux jours de suite.` : ""}</div>`;
+    } else if (p.protAlerte) {
+      alerte = `<div class="epingle-info">⚠️ ${esc(p.protAlerte)} — deux jours de suite.</div>`;
+    }
+    const detail = detailDuree(r);
+    const plus = [r.bonus ? `Le p'tit plus : ${esc(r.bonus)}` : "", esc(cuissonsTexte(r))].filter(Boolean).join(" · ");
+    return `${alerte}
+      <div class="duree"><b>${fmtDuree(dureeTotale(r))}</b>${detail ? `<span>${detail}</span>` : ""}</div>
+      ${p.side ? `<div class="avec">avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
+        <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement" aria-label="Changer l'accompagnement">↻</button></div>` : ""}
+      ${plus ? `<div class="plus">${plus}</div>` : ""}
+      ${r.url ? `<a class="bt" href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette sur ${esc(r.source || "le site")} ↗</a>` : ""}
+      <div class="actions">
+        ${p.epingle
+          ? `<button data-act="desepingler" data-jour="${esc(p.jour)}">Ne plus imposer</button>`
+          : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>`}
+        <button class="fait ${fait ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${icoCoche}${fait ? "Fait" : "Marquer fait"}</button>
+        ${btnFavori(r.nom)}
+      </div>
+      ${blocRecette(r, "ing-" + p.jour, `<p class="style-jour">Style du jour : ${esc(cadre.note)}</p>
+        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`)}`;
+  }
+  // jour sans plat : demande en attente, ou aucun plat possible
+  function corpsJourVide(cadre) {
+    if (nomEpingle(cadre.jour)) {
+      return `<div class="epingle-info">Tu as demandé ce plat pour ce jour. Il apparaîtra ici dès qu'il sera ajouté à ta base.</div>
+        <div class="actions"><button data-act="desepingler" data-jour="${esc(cadre.jour)}">Annuler la demande</button></div>`;
+    }
+    return `<p class="constraint">Aucune recette de la base ne tient ce critère (temps trop court, ou tout est exclu). Choisis un autre style pour ce jour dans Réglages, ou ajoute une envie pour enrichir la base.</p>`;
+  }
+  function platDuJour(s, cadre) {
+    const p = s.plan.find((x) => x.jour === cadre.jour);
+    return { p, r: p && getR(p.nom) };
+  }
+  // « Volaille », « en attente » ou le style du jour quand il n'y a pas de plat
+  const quoiDuJour = (cadre, r) => r ? r.cat : (nomEpingle(cadre.jour) ? "en attente" : cadre.note);
+
+  function blocCeSoir(i, sem, s, cadres) {
+    const cadre = cadres[i];
+    const { p, r } = platDuJour(s, cadre);
+    return `<section class="ce-soir${r ? "" : " vide"}">
+        <div class="kk">Ce soir · ${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r))}</div>
+        <div class="nm">${nomDuJour(cadre, p, r)}</div>
+        ${r ? corpsJour(p, r, cadre, s) : corpsJourVide(cadre)}
+      </section>`;
+  }
+  // un autre jour : une ligne de menu, qui se déplie sur la même fiche que « ce soir »
+  function ligneJour(i, sem, s, cadres) {
+    const cadre = cadres[i];
+    const { p, r } = platDuJour(s, cadre);
+    const l2 = r ? [p.side ? `avec ${esc(p.side.nom)}` : "", fmtDuree(dureeTotale(r))].filter(Boolean).join(" — ") : "";
+    return `<details class="jour-ligne${r ? "" : " vide"}" data-cle="jour-${esc(cadre.jour)}">
+        <summary><div class="dy">${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r))}</div>
+          <div class="n">${nomDuJour(cadre, p, r)}</div>${l2 ? `<div class="l2">${l2}</div>` : ""}</summary>
+        <div class="fiche-int">${r ? corpsJour(p, r, cadre, s) : corpsJourVide(cadre)}</div>
+      </details>`;
   }
 
   function renderSemaine() {
@@ -605,62 +714,25 @@
     if (!state.semaine || !state.semaine.plan.length || rangDe(state.semaine) !== rangCourant()) generer();
     const s = state.semaine;
     const sem = semaineDuRang(rangDe(s));
-    let html = `<div class="week-head"><strong>Semaine ${sem.num}</strong> · ${esc(plageSemaine(sem.an, sem.num))} · ${PARTS_CIBLE} parts/plat</div>
-      <button id="btn-gen" class="primary">🔄 Générer un nouveau menu</button><div class="cards">`;
     // on parcourt le CADRE (et non le plan) pour rendre visible un jour sans plat possible
-    getCadre().forEach((cadre) => {
-      const p = s.plan.find((x) => x.jour === cadre.jour);
-      const r = p && getR(p.nom);
-      const attendu = nomEpingle(cadre.jour);
-      if (!r && attendu) {
-        // une recette a été demandée pour ce jour mais n'est pas encore dans la base
-        html += `<div class="card day vide">
-          <div class="card-top"><span class="jour">${esc(cadre.jour)}</span><span class="cat">en attente</span></div>
-          <div class="plat">📌 ${esc(attendu)}</div>
-          <div class="epingle-info">Tu as demandé ce plat pour ce jour. Il apparaîtra ici dès qu'il sera ajouté à ta base.</div>
-          <div class="actions"><button data-act="desepingler" data-jour="${esc(cadre.jour)}">Annuler la demande</button></div>
-        </div>`;
-        return;
-      }
-      if (!r) {
-        html += `<div class="card day vide">
-          <div class="card-top"><span class="jour">${esc(cadre.jour)}</span><span class="cat">${esc(cadre.note)}</span></div>
-          <div class="plat">Aucun plat ne correspond</div>
-          <div class="constraint">Aucune recette de la base ne tient ce critère (temps trop court, ou tout est exclu). Choisis un autre style pour ce jour dans Réglages, ou ajoute une envie pour enrichir la base.</div>
-        </div>`;
-        return;
-      }
-      html += `<div class="card day">
-        <div class="card-top"><span class="jour">${esc(p.jour)}</span><span class="cat">${esc(r.cat)}</span>
-          <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
-        </div>
-        <div class="plat">${p.epingle ? "📌 " : ""}${esc(r.nom)}</div>
-        ${(!p.epingle && attendu) ? `<div class="epingle-info">📌 Tu as demandé <strong>${esc(attendu)}</strong> pour ce jour.
-          En attendant qu'il soit ajouté à ta base, voici une proposition.
-          <br><button class="linkbtn" data-act="desepingler" data-jour="${esc(p.jour)}">Annuler la demande</button></div>` : ""}
-        ${p.epingle ? `<div class="epingle-info">Plat imposé par toi pour ce jour.
-          ${p.horsCadre ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}).` : ""}
-          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}
-          ${p.protAlerte ? `<br>⚠️ ${esc(p.protAlerte)} — deux jours de suite.` : ""}</div>`
-          : (p.protAlerte ? `<div class="epingle-info">⚠️ ${esc(p.protAlerte)} — deux jours de suite.</div>` : "")}
-        <div class="temps">${tempsRecette(r)}</div>
-        ${r.url ? `<div class="src-carte"><a href="${esc(r.url)}" target="_blank" rel="noopener">📖 Voir la recette sur ${esc(r.source || "le site")} ↗</a></div>` : ""}
-        <div class="meta">${bullesRecette(r)}</div>
-        ${p.side ? `<div class="side">🍽️ avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
-          <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement">↻</button></div>` : ""}
-        ${r.bonus ? `<div class="bonus">✨ Le p'tit plus : ${esc(r.bonus)}</div>` : ""}
-        <div class="constraint">${esc(cadre ? cadre.note : "")}</div>
-        ${blocRecette(r)}
-        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>
-        <div class="actions">
-          ${p.epingle
-            ? `<button data-act="desepingler" data-jour="${esc(p.jour)}">📌 Ne plus imposer</button>`
-            : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>`}
-          <button class="fait ${estFait(s, p.jour) ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${estFait(s, p.jour) ? "✓ Fait" : "Marquer fait"}</button>
-        </div>
-      </div>`;
-    });
-    el.innerHTML = html + `</div>`;
+    const cadres = getCadre();
+    // la semaine affichée est toujours la semaine courante (contrôle ci-dessus) : son jour
+    // d'aujourd'hui est donc celui de l'horloge
+    const auj = indexAujourdhui();
+    let html = enTete("Menu de la semaine",
+      `<strong>Semaine ${sem.num}</strong> · ${esc(plageSemaine(sem.an, sem.num))} · ${PARTS_CIBLE} parts/plat`, "week-head");
+    html += blocCeSoir(auj, sem, s, cadres);
+    if (auj < 6) {
+      html += `<div class="orn orn-sec"><i></i>La suite<i></i></div>
+        <div class="menu">${cadres.slice(auj + 1).map((c, k) => ligneJour(auj + 1 + k, sem, s, cadres)).join("")}</div>`;
+    }
+    if (auj > 0) {
+      const resume = auj === 1 ? "Lundi : 1 plat déjà passé" : `Lundi → ${JOURS_LONG[auj - 1].toLowerCase()} : ${auj} plats déjà passés`;
+      html += `<details class="passes" data-cle="passes"><summary>${resume}</summary>
+        <div class="menu">${cadres.slice(0, auj).map((c, k) => ligneJour(k, sem, s, cadres)).join("")}</div></details>`;
+    }
+    html += `<div class="pied"><button id="btn-gen" class="pill">↻ Générer un nouveau menu</button></div>`;
+    redessiner(el, html);
   }
 
   // identifiant de la case à cocher d'un article (et d'un « p'tit plus ») : l'écran ET la liste
@@ -673,11 +745,14 @@
     const el = document.getElementById("view-courses");
     const acc = listeCourses();
     const rayons = ORDRE_RAYONS.filter((r) => acc[r]).concat(Object.keys(acc).filter((r) => !ORDRE_RAYONS.includes(r)));
-    if (!rayons.length) { el.innerHTML = `<p class="empty">Génère d'abord un menu dans l'onglet Semaine.</p>`; return; }
-    let n = 0, html = `<p class="hint">Coche ce que tu as déjà. Les quantités sont dans chaque recette (onglet Semaine).</p>`;
+    if (!rayons.length) {
+      el.innerHTML = enTete("Liste de courses") + `<p class="empty">Génère d'abord un menu dans l'onglet Semaine.</p>`;
+      return;
+    }
+    let n = 0, html = "";
     rayons.forEach((rayon) => {
       const items = Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom));
-      html += `<h3 class="cat-title">${esc(rayon)}</h3><div class="shop-list">`;
+      html += `<h3 class="cat-title orn"><i></i>${esc(rayon)}<i></i></h3><div class="shop-list">`;
       items.forEach((it) => {
         n++;
         const id = idArticle(rayon, it.nom);
@@ -697,7 +772,7 @@
       if (r && r.bonus) plus.push({ plat: r.nom, quoi: r.bonus });
     });
     if (plus.length) {
-      html += `<h3 class="cat-title">✨ Pour sublimer (optionnel)</h3>
+      html += `<h3 class="cat-title orn"><i></i>Pour sublimer (optionnel)<i></i></h3>
         <p class="hint">Pas indispensable — juste le petit truc en plus.</p><div class="shop-list">`;
       plus.forEach((it) => {
         const id = idPlus(it.plat);
@@ -710,9 +785,14 @@
       });
       html += `</div>`;
     }
-    html += `<button id="btn-copy" class="primary ghost">📋 Copier la liste</button>
-      <button id="btn-reset-courses" class="linkbtn">Tout décocher</button>`;
-    el.innerHTML = `<div class="week-head"><strong>${n} articles</strong></div>` + html;
+    const sem = semaineDuRang(rangDe(state.semaine));
+    // « Copier » et « Tout décocher » restent collés en bas de l'écran : avant, il fallait
+    // descendre au bout des ~70 articles pour les atteindre
+    el.innerHTML = enTete("Liste de courses", `<strong>${n} articles</strong> · semaine ${sem.num}`, "week-head")
+      + `<p class="hint">Coche ce que tu as déjà. Les quantités sont dans chaque recette (onglet Semaine).</p>`
+      + html
+      + `<div class="barre-bas"><button id="btn-copy" class="cp">${icoCopier}Copier la liste</button>
+          <button id="btn-reset-courses" class="lien">Tout décocher</button></div>`;
   }
 
   /** Texte de « Copier la liste » : seulement ce qui RESTE à acheter. L'écran dit « Coche ce
@@ -739,65 +819,80 @@
 
   function renderRecettes() {
     const el = document.getElementById("view-recettes");
+    const ancien = document.getElementById("search");
+    const recherche = ancien ? ancien.value : "";
     const cats = [...new Set(RECIPES.map((r) => r.cat))];
-    let html = `<input id="search" placeholder="🔍 Chercher une recette, un ingrédient…" />`;
+    const dispo = RECIPES.filter((r) => !estExclu(r)).length;
+    let html = enTete("Le carnet de recettes", `${RECIPES.length} recettes · ${dispo} disponibles`)
+      + `<label class="recherche">${icoLoupe}<input id="search" type="search" autocomplete="off" placeholder="Chercher une recette, un ingrédient…" /></label>`;
     cats.forEach((cat) => {
-      html += `<h3 class="cat-title">${esc(cat)}</h3><div class="cards">`;
-      RECIPES.filter((r) => r.cat === cat).forEach((r) => {
+      const liste = RECIPES.filter((r) => r.cat === cat);
+      html += `<h3 class="cat-title orn"><i></i>${esc(cat)} · ${liste.length}<i></i></h3><div class="cards">`;
+      liste.forEach((r) => {
         const ex = estExclu(r);
-        html += `<div class="card recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
-          <div class="card-top"><span class="plat">${esc(r.nom)}${ex ? ` <span class="badge off">exclue</span>` : ""}</span>
-            <button class="fav ${estFavori(r.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(r.nom)}" title="J'aime — à reproposer">${estFavori(r.nom) ? "❤️" : "🤍"}</button>
-          </div>
-          <div class="temps">${tempsRecette(r)}</div>
-          <div class="meta">${bullesRecette(r)} ${badge(r.saison, "season")}</div>
-          ${r.bonus ? `<div class="bonus">✨ Le p'tit plus : ${esc(r.bonus)}</div>` : ""}
-          ${blocRecette(r)}
+        const meta = [fmtDuree(dureeTotale(r)), ...(r.cuissons || []), r.air_fryer ? "air fryer" : "", r.saison || ""].filter(Boolean).join(" · ");
+        const detail = detailDuree(r);
+        html += `<div class="recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
+          <details data-cle="rec-${esc(r.nom)}">
+            <summary><span class="n">${esc(r.nom)}${ex ? `<span class="tag">exclue</span>` : ""}</span><span class="m">${esc(meta)}</span></summary>
+            <div class="det-body">
+              ${detail ? `<p class="plus">${fmtDuree(dureeTotale(r))} : ${detail}</p>` : ""}
+              ${r.bonus ? `<p class="plus">Le p'tit plus : ${esc(r.bonus)}</p>` : ""}
+              ${corpsRecette(r)}
+            </div>
+          </details>
+          ${btnFavori(r.nom)}
         </div>`;
       });
       html += `</div>`;
     });
-    el.innerHTML = html;
+    redessiner(el, html);
     const s = document.getElementById("search");
-    s.addEventListener("input", () => {
+    const filtrer = () => {
       const q = norm(s.value);
       el.querySelectorAll(".recipe").forEach((c) => { c.style.display = c.dataset.search.includes(q) ? "" : "none"; });
       el.querySelectorAll(".cat-title").forEach((t) => {
         const vis = [...t.nextElementSibling.querySelectorAll(".recipe")].some((c) => c.style.display !== "none");
         t.style.display = vis ? "" : "none";
       });
-    });
+    };
+    s.addEventListener("input", filtrer);
+    // un redessin (cœur, note, exclusion) ne doit pas effacer la recherche en cours
+    if (recherche) { s.value = recherche; filtrer(); }
   }
 
   function renderHistorique() {
     const el = document.getElementById("view-historique");
     const faits = state.historique.filter((h) => h.fait);
     if (!faits.length) {
-      el.innerHTML = `<p class="empty">Aucun plat cuisiné pour l'instant.<br>Touche « Marquer fait » sur un plat de la semaine.</p>`;
+      el.innerHTML = enTete("Historique") + `<p class="empty">Aucun plat cuisiné pour l'instant.<br>Touche « Marquer fait » sur un plat de la semaine.</p>`;
       return;
     }
     const notes = faits.map((h) => state.notes[h.nom] || 0).filter((n) => n > 0);
     const moy = notes.length ? (notes.reduce((a, b) => a + b, 0) / notes.length).toFixed(1) : null;
-    let html = `<div class="week-head"><strong>${faits.length} plat${faits.length > 1 ? "s" : ""} cuisiné${faits.length > 1 ? "s" : ""}</strong>${moy ? ` · note moyenne ${moy}/5` : ""}</div>
-      <p class="hint">Un plat cuisiné ne revient pas avant 3 semaines. Les mieux notés reviennent en priorité.</p>`;
+    let html = enTete("Historique",
+      `<strong>${faits.length} plat${faits.length > 1 ? "s" : ""} cuisiné${faits.length > 1 ? "s" : ""}</strong>${moy ? ` · note moyenne ${moy}/5` : ""}`, "week-head")
+      + `<p class="hint">Un plat cuisiné ne revient pas avant 3 semaines. Les mieux notés reviennent en priorité.</p>`;
     // groupé par semaine (année comprise : deux « semaine 40 » ne se mélangent pas), plus récent d'abord
     const parSem = {};
     faits.forEach((h) => { const r = rangDe(h); if (r !== null) (parSem[r] = parSem[r] || []).push(h); });
     Object.keys(parSem).map(Number).sort((a, b) => b - a).forEach((rang) => {
       const sem = semaineDuRang(rang);
-      html += `<h3 class="cat-title">Semaine ${sem.num} · ${esc(plageSemaine(sem.an, sem.num))}</h3><div class="cards">`;
+      html += `<h3 class="cat-title orn"><i></i>Semaine ${sem.num} · ${esc(plageSemaine(sem.an, sem.num))}<i></i></h3><div class="cards">`;
       parSem[rang].sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)).forEach((h) => {
         const r = getR(h.nom);
+        const i = JOURS.indexOf(h.jour);
         html += `<div class="card hist">
-          <div class="card-top"><span class="jour">${esc(h.jour)}</span>
-            <button class="fav ${estFavori(h.nom) ? "on" : ""}" data-act="fav" data-nom="${esc(h.nom)}" title="J'aime">${estFavori(h.nom) ? "❤️" : "🤍"}</button>
+          <div class="dd"><small>${esc(h.jour.toUpperCase())}</small><span>${i >= 0 ? quantieme(sem, i) : ""}</span></div>
+          <div class="tx">
+            <div class="n">${esc(h.nom)}</div>
+            <div class="note-row">${etoiles(h.nom)}</div>
+            <div class="liens">
+              ${r && r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette ↗</a>` : ""}
+              <button data-act="del-hist" data-nom="${esc(h.nom)}" data-rang="${rang}">Retirer</button>
+            </div>
           </div>
-          <div class="plat">${esc(h.nom)}</div>
-          <div class="note-row">Ta note : ${etoiles(h.nom)}</div>
-          <div class="actions">
-            ${r && r.url ? `<a class="btn-link" href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette ↗</a>` : ""}
-            <button data-act="del-hist" data-nom="${esc(h.nom)}" data-rang="${rang}">Retirer</button>
-          </div>
+          ${btnFavori(h.nom)}
         </div>`;
       });
       html += `</div>`;
@@ -805,68 +900,67 @@
     el.innerHTML = html;
   }
 
-  function renderReglages() {
-    const el = document.getElementById("view-reglages");
-    const nb = RECIPES.filter((r) => !estExclu(r)).length;
-    let html = `<h3 class="cat-title">Mon cadre — jour par jour</h3>
-      <p class="hint">Choisis le style de plat pour chaque jour (sport = express, plus de temps = mijoté…). Le menu se génère selon TES choix.</p>
+  /* ---------- Réglages : un sommaire, puis une page par section ----------
+     Les 8 sections tenaient sur une seule page très longue. Le sommaire montre ce qui est
+     réglé dans chacune ; un toucher ouvre la section, « ‹ Réglages » y revient. */
+  let sectionReglages = null;     // section ouverte (null = le sommaire)
+  // « 💪 Rapide sport (protéiné, ≤30 min) » → « Rapide sport »
+  const courtStyle = (label) => label.replace(/^[^\p{L}]+/u, "").split(/ \(| \//)[0].trim();
+  const nbDisponibles = () => RECIPES.filter((r) => !estExclu(r)).length;
+  const confPartage = () => { const sc = window.__sync ? window.__sync.conf() : null; return sc && sc.url && sc.token ? sc : null; };
+  const nomsEnvies = () => state.envies.map((e) => (e && e.nom ? e.nom : e));
+
+  function sectionCadre() {
+    let h = `<p class="hint">Choisis le style de plat pour chaque jour (sport = express, plus de temps = mijoté…). Le menu se génère selon TES choix.</p>
       <div class="jours-editor">`;
     JOURS.forEach((j, i) => {
       const cur = (state.cadreJours || CADRE_JOURS_DEFAUT)[i];
-      html += `<div class="jour-row"><span class="jour">${esc(j)}</span>
+      h += `<div class="jour-row"><span class="jour">${esc(j)}</span>
         <select data-act="cadre-jour" data-i="${i}">
           ${STYLES.map((s) => `<option value="${s.id}" ${s.id === cur ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
         </select></div>`;
     });
-    html += `</div>
-      <p class="hint">Ou pars d'un modèle tout fait :</p>
-      <div class="preset-quick">`;
+    h += `</div><p class="hint">Ou pars d'un modèle tout fait :</p><div class="preset-quick">`;
     (window.CADRE_PRESETS || []).forEach((p) => {
-      html += `<button class="preset-mini" data-act="preset" data-id="${esc(p.id)}">${esc(p.nom)}</button>`;
+      h += `<button class="preset-mini" data-act="preset" data-id="${esc(p.id)}">${esc(p.nom)}</button>`;
     });
-    html += `</div>
-      <h3 class="cat-title">Promos de la semaine</h3>
-      <p class="hint">Tape ce qui est en promo (ex : cabillaud, poulet). Le prochain menu généré privilégiera les recettes qui l'utilisent.</p>
+    return h + `</div>`;
+  }
+  function sectionPromos() {
+    let h = `<p class="hint">Tape ce qui est en promo (ex : cabillaud, poulet). Le prochain menu généré privilégiera les recettes qui l'utilisent.</p>
       <div class="add-row">
         <input id="new-promo" placeholder="Ex. : cabillaud" />
         <button id="btn-add-promo">Ajouter</button>
       </div>
       <div class="chips">`;
     state.promos.forEach((e, i) => {
-      html += `<span class="chip promo">${esc(e)}<button data-act="unpromo" data-i="${i}" title="Retirer">✕</button></span>`;
+      h += `<span class="chip promo">${esc(e)}<button data-act="unpromo" data-i="${i}" title="Retirer">✕</button></span>`;
     });
-    html += `</div>
-      <h3 class="cat-title">☀️ Saison</h3>
-      <p class="hint">Quand c'est activé, les plats de pleine saison passent devant et les recettes
-        hors saison sont écartées. Saison détectée : <strong>${esc(LIBELLE_SAISON[saisonActuelle()])}</strong>.
-        Coupe-le pour ouvrir le choix à toute la base.</p>
-      <label class="ligne-reglage">
-        <input type="checkbox" data-act="saison" ${state.saisonOff ? "" : "checked"} />
-        Privilégier les recettes de saison
-      </label>
-      <h3 class="cat-title">Ingrédients exclus</h3>
-      <p class="hint">Une recette contenant un de ces ingrédients ne sera jamais proposée. ${nb}/${RECIPES.length} recettes disponibles.</p>
+    return h + `</div>`;
+  }
+  function sectionExclus() {
+    let h = `<p class="hint">Une recette contenant un de ces ingrédients ne sera jamais proposée. ${nbDisponibles()}/${RECIPES.length} recettes disponibles.</p>
       <div class="add-row">
         <input id="new-ex" placeholder="Ex. : coriandre" />
         <button id="btn-add-ex">Ajouter</button>
       </div>
       <div class="chips">`;
     state.exclusions.forEach((e, i) => {
-      html += `<span class="chip">${esc(e)}<button data-act="unexclude" data-i="${i}" title="Retirer">✕</button></span>`;
+      h += `<span class="chip">${esc(e)}<button data-act="unexclude" data-i="${i}" title="Retirer">✕</button></span>`;
     });
-    html += `</div>
-      <h3 class="cat-title">❤️ Mes favoris</h3>
-      <p class="hint">Les recettes que tu aimes (cœur sur une carte) reviennent plus souvent.</p>`;
-    if (!state.favoris.length) html += `<p class="empty">Aucun favori. Touche le 🤍 sur une recette.</p>`;
-    else {
-      html += `<div class="chips">`;
-      state.favoris.forEach((nom) => {
-        html += `<span class="chip fav-chip">${esc(nom)}<button data-act="fav" data-nom="${esc(nom)}" title="Retirer">✕</button></span>`;
-      });
-      html += `</div>`;
-    }
-    html += `<h3 class="cat-title">💡 Mes envies (à scraper)</h3>
-      <p class="hint">Propose un plat que tu aimerais voir ajouté. Tu peux coller le lien d'une recette,
+    return h + `</div>`;
+  }
+  function sectionFavoris() {
+    let h = `<p class="hint">Les recettes que tu aimes (cœur sur une carte) reviennent plus souvent.</p>`;
+    if (!state.favoris.length) return h + `<p class="empty">Aucun favori. Touche le cœur sur une recette.</p>`;
+    h += `<div class="chips">`;
+    state.favoris.forEach((nom) => {
+      h += `<span class="chip fav-chip">${esc(nom)}<button data-act="fav" data-nom="${esc(nom)}" title="Retirer">✕</button></span>`;
+    });
+    return h + `</div>`;
+  }
+  function sectionEnvies() {
+    let h = `<p class="hint">Propose un plat que tu aimerais voir ajouté. Tu peux coller le lien d'une recette,
         et choisir un jour pour qu'elle y soit imposée dès qu'elle est dans ta base.</p>
       <div class="add-row">
         <input id="new-envie" placeholder="Ex. : enchiladas au poulet" />
@@ -891,35 +985,75 @@
       // « en attente » alors que « Tendron de veau printanier » est bien dans la base.
       const trouvee = trouverRecette(nom);
       const attente = jour && !trouvee ? ` · en attente d'ajout` : "";
-      html += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${esc(attente)})</em>` : ""}${url ? " 🔗" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
+      h += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${esc(attente)})</em>` : ""}${url ? " · lien" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
-    html += `</div>
-      <h3 class="cat-title">🔗 Partage à deux</h3>`;
-    const sc = window.__sync ? window.__sync.conf() : null;
-    if (sc && sc.url && sc.token) {
-      html += `<p class="hint">Cet appareil partage son menu, ses courses et ses notes.
-        ${sc.erreur ? `<br><strong>⚠️ Dernière synchro en échec : ${esc(sc.erreur)}</strong>` : ""}
-        ${sc.derniere ? `<br>Dernière synchro : ${new Date(sc.derniere).toLocaleString("fr-FR")}` : ""}</p>
+    return h + `</div>`;
+  }
+  function sectionPartage() {
+    const sc = confPartage();
+    if (sc) {
+      return `<p class="hint">Cet appareil partage son menu, ses courses et ses notes.
+          ${sc.erreur ? `<br><strong>⚠️ Dernière synchro en échec : ${esc(sc.erreur)}</strong>` : ""}
+          ${sc.derniere ? `<br>Dernière synchro : ${new Date(sc.derniere).toLocaleString("fr-FR")}` : ""}</p>
         <div class="actions">
           <button id="btn-sync-now">↻ Synchroniser</button>
           <button id="btn-sync-off">Se déconnecter</button>
         </div>`;
-    } else {
-      html += `<p class="hint">Colle ici l'adresse du hub et le mot de passe pour partager le menu et la liste de courses avec Marine. Les deux téléphones doivent saisir exactement les mêmes.</p>
-        <div class="add-row"><input id="sync-url" placeholder="Adresse du hub (…/exec)" /></div>
-        <div class="add-row">
-          <input id="sync-token" placeholder="Mot de passe partagé" />
-          <button id="btn-sync-on">Connecter</button>
-        </div>`;
     }
-    html += `<h3 class="cat-title">Données</h3>
-      <p class="hint">L'historique de tes plats cuisinés est dans l'onglet 🕑 Historique.</p>
+    return `<p class="hint">Colle ici l'adresse du hub et le mot de passe pour partager le menu et la liste de courses avec Marine. Les deux téléphones doivent saisir exactement les mêmes.</p>
+      <div class="add-row"><input id="sync-url" placeholder="Adresse du hub (…/exec)" /></div>
+      <div class="add-row">
+        <input id="sync-token" placeholder="Mot de passe partagé" />
+        <button id="btn-sync-on">Connecter</button>
+      </div>`;
+  }
+  function sectionDonnees() {
+    return `<p class="hint">L'historique de tes plats cuisinés est dans l'onglet Historique.</p>
       <p class="hint">Les nouvelles recettes et améliorations arrivent toutes seules, mais si tu
         attends quelque chose qui ne vient pas, tu peux forcer la vérification.</p>
-      <button id="btn-maj">🔄 Chercher une mise à jour</button>
+      <div class="pied"><button id="btn-maj" class="pill">↻ Chercher une mise à jour</button></div>
       <p class="hint">L'app se rechargera si une nouvelle version existe. Tes données sont conservées.</p>
       <button id="btn-reset" class="linkbtn danger">Tout réinitialiser</button>`;
-    el.innerHTML = html;
+  }
+  const SECTIONS_REGLAGES = [
+    { id: "cadre", titre: "Mon cadre — jour par jour", corps: sectionCadre,
+      resume: () => (state.cadreJours || CADRE_JOURS_DEFAUT).map((id) => courtStyle(STYLE(id).label)).join(", ") },
+    { id: "promos", titre: "Promos de la semaine", corps: sectionPromos,
+      resume: () => state.promos.length ? state.promos.join(", ") : "Aucune promo pour l'instant" },
+    { id: "saison", titre: "Saison", interrupteur: true,
+      resume: () => {
+        const s = LIBELLE_SAISON[saisonActuelle()];
+        return `${s.charAt(0).toUpperCase() + s.slice(1)} détecté · ${state.saisonOff ? "saison ignorée, toute la base est utilisée" : "recettes de saison privilégiées"}`;
+      } },
+    { id: "exclus", titre: "Ingrédients exclus", corps: sectionExclus,
+      resume: () => `${state.exclusions.length ? state.exclusions.join(", ") : "Aucun"} · ${nbDisponibles()}/${RECIPES.length} recettes disponibles` },
+    { id: "favoris", titre: "Mes favoris", corps: sectionFavoris,
+      resume: () => state.favoris.length ? state.favoris.join(", ") : "Aucun favori" },
+    { id: "envies", titre: "Mes envies (à scraper)", corps: sectionEnvies,
+      resume: () => state.envies.length ? nomsEnvies().join(", ") : "Aucune envie" },
+    { id: "partage", titre: "Partage à deux", corps: sectionPartage,
+      resume: () => { const sc = confPartage(); return !sc ? "Pas connecté" : (sc.erreur ? "Connecté · dernière synchro en échec" : "Connecté · menu, courses et notes partagés"); } },
+    { id: "donnees", titre: "Données", corps: sectionDonnees,
+      resume: () => "Chercher une mise à jour · Tout réinitialiser" },
+  ];
+
+  function renderReglages() {
+    const el = document.getElementById("view-reglages");
+    const sec = SECTIONS_REGLAGES.find((x) => x.id === sectionReglages && x.corps);
+    if (sec) {
+      el.innerHTML = `<button class="retour" data-act="reglages-retour">‹ Réglages</button>
+        <div class="vue-tete">${ornement("Réglages")}<h2 class="sec-titre">${esc(sec.titre)}</h2></div>
+        <div class="sec">${sec.corps()}</div>`;
+      return;
+    }
+    let html = enTete("Réglages") + `<div class="sommaire">`;
+    SECTIONS_REGLAGES.forEach((x) => {
+      const texte = `<span class="tx"><span class="n">${esc(x.titre)}</span><span class="m">${esc(x.resume())}</span></span>`;
+      html += x.interrupteur
+        ? `<label class="so">${texte}<input type="checkbox" class="switch" data-act="saison" aria-label="Privilégier les recettes de saison" ${state.saisonOff ? "" : "checked"} /></label>`
+        : `<button class="so" data-act="reglages-ouvrir" data-sec="${x.id}">${texte}<span class="cv">›</span></button>`;
+    });
+    el.innerHTML = html + `</div>`;
   }
 
   // ---------- navigation ----------
@@ -928,6 +1062,7 @@
     document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
     document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
     document.getElementById("view-" + v).classList.add("active");
+    if (v === "reglages") sectionReglages = null;   // l'onglet s'ouvre toujours sur le sommaire
     document.querySelector(`.tab[data-view="${v}"]`).classList.add("active");
     RENDER[v]();
     window.scrollTo(0, 0);
@@ -999,6 +1134,8 @@
       return;
     }
     const act = t.dataset.act;
+    if (act === "reglages-ouvrir") { sectionReglages = t.dataset.sec; renderReglages(); window.scrollTo(0, 0); return; }
+    if (act === "reglages-retour") { sectionReglages = null; renderReglages(); window.scrollTo(0, 0); return; }
     if (act === "epingler") {
       epingler(t.dataset.jour, t.dataset.nom);
       generer();                                  // le reste de la semaine se réorganise autour
@@ -1074,7 +1211,7 @@
       t.disabled = true; t.textContent = "Recherche…";
       forcerMiseAJour().then((neuf) => {
         if (neuf) return;                        // la page se recharge d'elle-même
-        t.disabled = false; t.textContent = "🔄 Chercher une mise à jour";
+        t.disabled = false; t.textContent = "↻ Chercher une mise à jour";
         toast("Tu as déjà la dernière version");
       });
       return;
