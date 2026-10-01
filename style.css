@@ -9,8 +9,16 @@
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --barre: 64px;
 }
+/* Thème sombre — Réglages › Apparence (v32) : « Sombre » pose data-theme="sombre" sur <html>,
+   « Clair » pose data-theme="clair », « Auto » n'en pose aucun et suit le téléphone.
+   Les deux blocs portent les MÊMES valeurs : en changer une, c'est changer l'autre. */
+:root[data-theme="sombre"] {
+  --pap: #1c1b18; --carte: #24221e; --champ: #24221e;
+  --ink: #eee5d3; --mut: #a69c8b; --soft: #9a9080; --ln: #34312b; --btn: #45413a; --btn-ac: #6b5a40;
+  --ac: #d6a35c; --ac-ink: #1c1b18; --or: #d6a35c; --or-vide: #45413a; --danger: #e07a5f;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="clair"]) {
     --pap: #1c1b18; --carte: #24221e; --champ: #24221e;
     --ink: #eee5d3; --mut: #a69c8b; --soft: #9a9080; --ln: #34312b; --btn: #45413a; --btn-ac: #6b5a40;
     --ac: #d6a35c; --ac-ink: #1c1b18; --or: #d6a35c; --or-vide: #45413a; --danger: #e07a5f;
@@ -184,8 +192,11 @@ button.x:active { background: var(--danger); border-color: var(--danger); color:
   border-color: var(--ac);
   background: var(--ac) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 12px no-repeat;
 }
+:root[data-theme="sombre"] .shop-row input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c1b18' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+}
 @media (prefers-color-scheme: dark) {
-  .shop-row input:checked {
+  :root:not([data-theme="clair"]) .shop-row input:checked {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c1b18' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
   }
 }
@@ -267,6 +278,15 @@ button.x:active { background: var(--danger); border-color: var(--danger); color:
 }
 .switch:checked { background: var(--ac); }
 .switch:checked::after { transform: translateX(18px); }
+/* Apparence : trois choix côte à côte (Auto / Clair / Sombre) directement sur le sommaire */
+.so.choix { cursor: default; }
+.seg { display: inline-flex; flex: none; border: 1px solid var(--btn-ac); border-radius: 999px; overflow: hidden; }
+.seg button {
+  border: none; background: none; padding: 7px 11px; font-size: .78rem; font-weight: 600;
+  color: var(--soft); cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--btn-ac); }
+.seg button[aria-pressed="true"] { background: var(--ac); color: var(--ac-ink); }
 
 /* ---------- Réglages : une section ouverte ---------- */
 .retour { border: none; background: none; color: var(--ac); font-size: .85rem; font-weight: 600; padding: 14px 20px 0; cursor: pointer; }

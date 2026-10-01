@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 31;
+  const VERSION_APP = 32;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -132,6 +132,34 @@
   if (!state.epingles) state.epingles = {};     // jour → recette imposée pour la semaine en cours
   if (state.saisonOff === undefined) state.saisonOff = false;  // filtre « de saison » actif par défaut
   if (!Array.isArray(state.servis)) state.servis = [];  // menus des semaines passées : { an, num, noms }
+
+  /* ---------- apparence (v32) ----------
+     « auto » suit le téléphone ; « clair » et « sombre » le forcent. C'est un réglage de CET
+     appareil : rangé à part (clé mims_theme), hors des données partagées par la synchro.
+     index.html le relit avant la feuille de style, pour que l'app ne s'affiche pas une
+     fraction de seconde dans l'autre thème au démarrage. */
+  const THEME_CLE = "mims_theme";
+  const THEMES = { auto: "Auto", clair: "Clair", sombre: "Sombre" };
+  const COULEUR_BARRE = { clair: "#f7f1e8", sombre: "#1c1b18" };   // = --pap de chaque thème
+  const sombreTelephone = () => !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  function themeChoisi() {
+    try { const t = localStorage.getItem(THEME_CLE); return t === "clair" || t === "sombre" ? t : "auto"; } catch (e) { return "auto"; }
+  }
+  function appliquerTheme(t) {
+    const racine = document.documentElement;
+    if (t === "clair" || t === "sombre") racine.dataset.theme = t; else delete racine.dataset.theme;
+    // barre d'état du téléphone : en « auto », chaque balise retrouve sa couleur d'origine
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+      if (!m.dataset.origine) m.dataset.origine = m.getAttribute("content");
+      m.setAttribute("content", COULEUR_BARRE[t] || m.dataset.origine);
+    });
+  }
+  function choisirTheme(t) {
+    if (!THEMES[t]) return;
+    try { if (t === "auto") localStorage.removeItem(THEME_CLE); else localStorage.setItem(THEME_CLE, t); } catch (e) { /* stockage indisponible : le choix vaut pour la session */ }
+    appliquerTheme(t);
+  }
+  appliquerTheme(themeChoisi());
 
   const estFavori = (nom) => state.favoris.includes(nom);
   const ACC = () => window.ACCOMPAGNEMENTS || [];
@@ -1025,6 +1053,11 @@
         const s = LIBELLE_SAISON[saisonActuelle()];
         return `${s.charAt(0).toUpperCase() + s.slice(1)} détecté · ${state.saisonOff ? "saison ignorée, toute la base est utilisée" : "recettes de saison privilégiées"}`;
       } },
+    { id: "apparence", titre: "Apparence", choix: true,
+      resume: () => {
+        const t = themeChoisi();
+        return t === "auto" ? `Suit le téléphone · ${sombreTelephone() ? "sombre" : "clair"} en ce moment` : `Toujours ${t}, quel que soit le téléphone`;
+      } },
     { id: "exclus", titre: "Ingrédients exclus", corps: sectionExclus,
       resume: () => `${state.exclusions.length ? state.exclusions.join(", ") : "Aucun"} · ${nbDisponibles()}/${RECIPES.length} recettes disponibles` },
     { id: "favoris", titre: "Mes favoris", corps: sectionFavoris,
@@ -1049,11 +1082,25 @@
     let html = enTete("Réglages") + `<div class="sommaire">`;
     SECTIONS_REGLAGES.forEach((x) => {
       const texte = `<span class="tx"><span class="n">${esc(x.titre)}</span><span class="m">${esc(x.resume())}</span></span>`;
-      html += x.interrupteur
-        ? `<label class="so">${texte}<input type="checkbox" class="switch" data-act="saison" aria-label="Privilégier les recettes de saison" ${state.saisonOff ? "" : "checked"} /></label>`
-        : `<button class="so" data-act="reglages-ouvrir" data-sec="${x.id}">${texte}<span class="cv">›</span></button>`;
+      if (x.interrupteur) {
+        html += `<label class="so">${texte}<input type="checkbox" class="switch" data-act="saison" aria-label="Privilégier les recettes de saison" ${state.saisonOff ? "" : "checked"} /></label>`;
+      } else if (x.choix) {
+        const actuel = themeChoisi();
+        html += `<div class="so choix">${texte}<span class="seg" role="group" aria-label="Apparence">${Object.entries(THEMES)
+          .map(([v, l]) => `<button data-act="theme" data-val="${v}" aria-pressed="${v === actuel}">${l}</button>`).join("")}</span></div>`;
+      } else {
+        html += `<button class="so" data-act="reglages-ouvrir" data-sec="${x.id}">${texte}<span class="cv">›</span></button>`;
+      }
     });
     el.innerHTML = html + `</div>`;
+  }
+  // en « Auto », le résumé « sombre / clair en ce moment » suit le téléphone s'il change de thème
+  if (window.matchMedia) {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const majResume = () => {
+      if (!sectionReglages && document.getElementById("view-reglages").classList.contains("active")) renderReglages();
+    };
+    if (mq.addEventListener) mq.addEventListener("change", majResume);
   }
 
   // ---------- navigation ----------
@@ -1134,6 +1181,11 @@
       return;
     }
     const act = t.dataset.act;
+    if (act === "theme") {
+      choisirTheme(t.dataset.val);
+      renderReglages();
+      return toast(t.dataset.val === "auto" ? "L'app suit maintenant ton téléphone" : `Thème ${t.dataset.val} activé`);
+    }
     if (act === "reglages-ouvrir") { sectionReglages = t.dataset.sec; renderReglages(); window.scrollTo(0, 0); return; }
     if (act === "reglages-retour") { sectionReglages = null; renderReglages(); window.scrollTo(0, 0); return; }
     if (act === "epingler") {
@@ -1302,7 +1354,7 @@
 
   // exposé pour les tests automatisés
   window.__mims = {
-    generer, listeCourses, estExclu, getCadre, epingler, desepingler,
+    generer, listeCourses, estExclu, getCadre, epingler, desepingler, choisirTheme, themeChoisi,
     exclure: (mot) => { if (!ajouterExclusion(mot)) return 0; return appliquerExclusion(); },
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)

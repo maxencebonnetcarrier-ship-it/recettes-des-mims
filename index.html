@@ -6,7 +6,12 @@
   <meta name="theme-color" content="#f7f1e8" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#1c1b18" media="(prefers-color-scheme: dark)" />
   <title>Recettes des Mim's</title>
-  <link rel="stylesheet" href="style.css?v=31" />
+  <script>
+    // Apparence choisie dans Réglages (clair / sombre forcé), posée AVANT la feuille de style :
+    // sinon l'app s'afficherait une fraction de seconde dans le thème du téléphone. (app.js, apparence)
+    try { var th = localStorage.getItem("mims_theme"); if (th === "clair" || th === "sombre") document.documentElement.dataset.theme = th; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="style.css?v=32" />
   <!-- Écran d'accueil : Android/Chrome via le manifeste, iPhone via les balises apple-* -->
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
@@ -41,9 +46,9 @@
        ADRESSE différente, donc il ne peut pas servir une ancienne copie en cache.
        C'est la seule méthode fiable — « réseau d'abord » ne suffit pas, GitHub Pages
        répondant Cache-Control: max-age=600. À incrémenter avec VERSION_APP dans app.js. -->
-  <script src="data.js?v=31"></script>
-  <script src="app.js?v=31"></script>
-  <script src="sync.js?v=31"></script>
+  <script src="data.js?v=32"></script>
+  <script src="app.js?v=32"></script>
+  <script src="sync.js?v=32"></script>
   <script>
     // Hors-ligne : uniquement en https (GitHub Pages) ou en local, jamais en file://
     if ("serviceWorker" in navigator && location.protocol !== "file:") {

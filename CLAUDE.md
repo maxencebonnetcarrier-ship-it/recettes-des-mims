@@ -22,6 +22,9 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
   des 3 semaines sans « Marquer fait »
   (une semaine = année ISO + numéro, champs `an` et `num`). `test_courses.js` — « Copier la liste »
   ne recopie que les articles non cochés. Tous deux remettent à zéro l'état de l'appareil testé.
+- `test_theme.js` — réglage Réglages › Apparence (Auto / Clair / Sombre) : à lancer téléphone en clair
+  PUIS en sombre. L'apparence est un réglage de l'appareil (clé `mims_theme`), hors synchro ;
+  `index.html` la relit avant la feuille de style. Le test remet « Auto » à la fin.
 
 ## Provenance des recettes
 Scrapées via Firecrawl depuis **3 sites spécialisés uniquement** : marmiton.org, saveurs-magazine.fr,
