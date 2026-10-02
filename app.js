@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 33;
+  const VERSION_APP = 34;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -658,10 +658,40 @@
      recette d'une autre source n'affiche rien plutôt qu'un chiffre inventé. */
   const NIVEAU_PRIX = { "Très bon marché": 1, "Bon marché": 1, "Moyen": 2, "Assez cher": 3, "Cher": 3 };
   // échelle à 3 € : les atteints en plein, les autres pâles (« €€ » + « € » pâle = Moyen)
+  const echellePrix = (n, etiquette, bulle) =>
+    `<span class="prix" role="img" aria-label="${esc(etiquette)}" title="${esc(bulle || etiquette)}">${"€".repeat(n)}<i>${"€".repeat(3 - n)}</i></span>`;
   function prixHtml(r) {
     const n = r && NIVEAU_PRIX[r.cout];
     if (!n) return "";
-    return `<span class="prix" role="img" aria-label="Prix : ${esc(r.cout)}" title="Prix : ${esc(r.cout)} (selon ${esc(r.source || "la source")})">${"€".repeat(n)}<i>${"€".repeat(3 - n)}</i></span>`;
+    return echellePrix(n, `Prix : ${r.cout}`, `Prix : ${r.cout} (selon ${r.source || "la source"})`);
+  }
+  const LIBELLE_NIVEAU = { 1: "bon marché", 2: "moyen", 3: "assez cher" };
+
+  /* Résumé en tête de la Semaine (v34) : combien de plats €, €€, €€€, et les calories moyennes
+     par part. PLATS SEULS : un accompagnement ajouté remplace souvent un féculent dont la part
+     dans le chiffre de la source est inconnue (voir kcalTexte). Calculé sur les plats qui ont
+     l'information, en disant sur combien — jamais complété par une estimation. */
+  function bilanSemaine(s) {
+    const plats = s.plan.map((p) => getR(p.nom)).filter(Boolean);
+    if (!plats.length) return "";
+    const parNiveau = { 1: 0, 2: 0, 3: 0 };
+    plats.forEach((r) => { const n = NIVEAU_PRIX[r.cout]; if (n) parNiveau[n]++; });
+    const avecPrix = parNiveau[1] + parNiveau[2] + parNiveau[3];
+    const sansPrix = plats.length - avecPrix;
+    const budget = avecPrix
+      ? [1, 2, 3].filter((n) => parNiveau[n]).map((n) =>
+          `<span class="niv" data-niveau="${n}"><b>${parNiveau[n]}</b>&nbsp;×&nbsp;${echellePrix(n, `${parNiveau[n]} plat${parNiveau[n] > 1 ? "s" : ""} ${LIBELLE_NIVEAU[n]}`)}</span>`).join("")
+        + (sansPrix ? `<span class="nd">${sansPrix} sans prix</span>` : "")
+      : `<span class="nd">non donné par les sources</span>`;
+    const k = plats.filter((r) => r.kcal_part);
+    const moy = k.length ? Math.round(k.reduce((t, r) => t + r.kcal_part, 0) / k.length / 10) * 10 : 0;
+    const kcal = k.length
+      ? `≈ <b>${moy}</b> kcal par part${k.length < plats.length ? ` <span class="nd">(sur ${k.length} plats)</span>` : ""}`
+      : `<span class="nd">non données par les sources</span>`;
+    return `<div class="bilan" role="group" aria-label="Résumé de la semaine">
+        <div class="bc"><span class="bk">Budget</span>${budget}</div>
+        <div class="bc"><span class="bk">Calories moyennes</span>${kcal}</div>
+      </div>`;
   }
   /* « ≈ 370 kcal par part » ; avec l'accompagnement pris : le total. SAUF quand il remplace des
      féculents de la recette : le chiffre de la source les compte déjà, et on ne connaît pas leur
@@ -846,6 +876,7 @@
     const auj = indexAujourdhui();
     let html = enTete("Menu de la semaine",
       `<strong>Semaine ${sem.num}</strong> · ${esc(plageSemaine(sem.an, sem.num))} · ${PARTS_CIBLE} parts/plat`, "week-head");
+    html += bilanSemaine(s);
     html += blocCeSoir(auj, sem, s, cadres);
     if (auj < 6) {
       html += `<div class="orn orn-sec"><i></i>La suite<i></i></div>

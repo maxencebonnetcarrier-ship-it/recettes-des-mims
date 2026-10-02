@@ -74,6 +74,44 @@
       else if (/kcal|€/.test(carte.querySelector("summary").textContent)) ech(`4. « ${sans.nom} » affiche un prix ou des calories que sa source ne donne pas`);
     }
 
+    /* 6. En tête de la Semaine : le nombre de plats €, €€, €€€ et les calories moyennes par
+          part, calculés sur le menu affiché — et sur combien de plats quand il en manque. */
+    const NIV = { "Très bon marché": 1, "Bon marché": 1, "Moyen": 2, "Assez cher": 3, "Cher": 3 };
+    const verifierBilan = (etape) => {
+      onglet("semaine");
+      const bilan = document.querySelector("#view-semaine .bilan");
+      const ceSoir = document.querySelector("#view-semaine .ce-soir");
+      if (!bilan) { ech(`${etape}. pas de résumé budget / calories en tête de la Semaine`); return; }
+      if (ceSoir && !(bilan.compareDocumentPosition(ceSoir) & Node.DOCUMENT_POSITION_FOLLOWING)) ech(`${etape}. le résumé n'est pas avant « Ce soir »`);
+      const plats = st.semaine.plan.map((p) => R(p.nom)).filter(Boolean);
+      [1, 2, 3].forEach((n) => {
+        const attendu = plats.filter((r) => NIV[r.cout] === n).length;
+        const el = bilan.querySelector(`.niv[data-niveau="${n}"] b`);
+        const lu = el ? +el.textContent : 0;
+        if (lu !== attendu) ech(`${etape}. ${"€".repeat(n)} : ${lu} plat(s) affiché(s) au lieu de ${attendu}`);
+      });
+      const sansPrix = plats.filter((r) => !NIV[r.cout]).length;
+      const texte = bilan.textContent.replace(/\s+/g, " ");
+      if (sansPrix && !texte.includes(`${sansPrix} sans prix`)) ech(`${etape}. « ${sansPrix} sans prix » n'est pas dit : ${texte}`);
+      const k = plats.filter((r) => r.kcal_part);
+      if (k.length) {
+        const moy = Math.round(k.reduce((t, r) => t + r.kcal_part, 0) / k.length / 10) * 10;
+        if (!texte.includes(`≈ ${moy} kcal`)) ech(`${etape}. moyenne attendue ≈ ${moy} kcal : ${texte}`);
+        if (k.length < plats.length && !texte.includes(`sur ${k.length} plats`)) ech(`${etape}. ne dit pas « sur ${k.length} plats » : ${texte}`);
+        if (k.length === plats.length && /sur \d+ plats/.test(texte)) ech(`${etape}. dit « sur N plats » alors que tous ont leurs calories`);
+      }
+      return texte;
+    };
+    M.generer();
+    res.details.bilan = verifierBilan(6);
+    // un plat sans prix ni calories imposé au lundi : le résumé doit le dire, pas l'inventer
+    const SANS = "Émincés de dinde aux poireaux";
+    if (R(SANS) && !R(SANS).cout && !R(SANS).kcal_part) {
+      M.epingler("Lun", SANS); M.generer();
+      res.details.bilanAvecPlatSansInfo = verifierBilan("6 bis");
+      M.desepingler("Lun");
+    }
+
     /* 5. Le carnet de recettes montre le prix et les calories sur chaque carte renseignée. */
     onglet("recettes");
     const carteDijon = [...document.querySelectorAll("#view-recettes .recipe")].find((c) => c.querySelector(".n").textContent.startsWith(DIJON));

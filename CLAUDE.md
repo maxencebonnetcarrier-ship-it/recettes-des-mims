@@ -57,6 +57,9 @@ Les calories Marmiton sont calculées pour SON nombre de parts : `prix_kcal.py` 
 `parts_origine` de la recette, et les écarte quand le site n'a pas pesé l'ingrédient principal
 (part < 150 g pour un plat, < 40 g pour un accompagnement) ou que le total est hors de toute assiette
 (> 1500 kcal ou part > 1 kg ; > 500 g pour un accompagnement).
+En tête de la Semaine (v34), un résumé compte les plats €, €€, €€€ et donne les calories moyennes
+par part des PLATS SEULS (un accompagnement ajouté remplace souvent un féculent dont la part dans
+le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plats » quand il en manque.
 
 ## Règles métier
 - **Jours** : Lun Volaille · Mar Légumineuses · Mer Porc · Jeu Poisson · Ven Express (retour du sport)

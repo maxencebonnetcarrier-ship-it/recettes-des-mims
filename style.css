@@ -103,6 +103,14 @@ p.empty { font-family: var(--serif); font-style: italic; text-align: center; col
 .pris.on { background: var(--ac); border-color: var(--ac); color: var(--ac-ink); }
 .remplace-info { font-family: var(--serif); font-style: italic; font-size: .75rem; color: var(--mut); }
 .eco { font-size: .8rem; color: var(--mut); margin-top: 4px; }
+/* v34 : résumé budget / calories en tête de la Semaine — deux colonnes séparées d'un filet */
+.bilan { display: flex; justify-content: center; margin: 2px 20px 10px; }
+.bilan .bc { flex: 1 1 0; min-width: 0; text-align: center; padding: 0 8px; font-size: .82rem; line-height: 1.35; }
+.bilan .bc + .bc { border-left: 1px solid var(--ln); }
+.bilan .bk { display: block; font-size: .6rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--soft); margin-bottom: 2px; }
+.bilan b { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; }
+.bilan .niv { white-space: nowrap; margin: 0 4px; }
+.bilan .nd { display: block; font-family: var(--serif); font-style: italic; font-size: .72rem; color: var(--mut); }
 /* échelle à 3 € : les atteints en plein, les autres pâles */
 .prix { font-family: var(--sans); font-style: normal; font-weight: 700; letter-spacing: .03em; color: var(--ac); white-space: nowrap; }
 .prix i { font-style: normal; opacity: .3; }
