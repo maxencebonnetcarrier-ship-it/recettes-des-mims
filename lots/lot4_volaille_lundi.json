@@ -58,7 +58,9 @@
    "Faire revenir les escalopes (toujours dans la même poêle) et réserver.",
    "Déglacer la poêle avec le vinaigre. Une fois réduit, ajouter l'eau, la crème fraîche, les lardons, les oignons et le poulet.",
    "Laisser mijoter, jusqu'à ce que le poulet soit cuit."
-  ]
+  ],
+  "cout": "Moyen",
+  "kcal_part": 430
  },
  {
   "nom": "Cordon bleu",
@@ -127,7 +129,9 @@
    "et pour finir dans la chapelure.",
    "Les faire cuire quelques minutes de chaque côté dans une poêle avec un peu de beurre.",
    "Déguster immédiatement."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 360
  },
  {
   "nom": "Aiguillettes de poulet aux poivrons",
@@ -195,7 +199,9 @@
    "Lorsque tout est cuit, baisser le feu, y mettre le crème fraiche, la delayer et y mettre le curry autant que vous voulez selon votre goût.",
    "Saler et poivrer.",
    "Servir."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 1180
  },
  {
   "nom": "Penne au poulet sauce pesto",
@@ -263,6 +269,8 @@
    "Ajouter la sauce pesto, remuer, rajouter la crème fraîche, et laisser mijoter 10 minutes.",
    "Faire cuire les pâtes et mélanger avec le poulet au pesto.",
    "Déguster."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 960
  }
 ]

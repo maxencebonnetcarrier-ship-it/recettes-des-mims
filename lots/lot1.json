@@ -48,7 +48,9 @@
    "Cette recette se déguste avec du riz ou du blé."
   ],
   "morceau": "blancs de poulet",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 380
  },
  {
   "nom": "Poulet au curry lait de coco et noix de cajou",
@@ -117,7 +119,9 @@
    "Verser la sauce soja puis la crème de coco. Mélanger puis laisser cuire 10 minutes. Ajouter les noix de cajou 5 minutes avant la fin. Saler, poivrer."
   ],
   "morceau": "filets de poulet",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 560
  },
  {
   "nom": "Émincés de dinde aux poireaux",
@@ -251,7 +255,9 @@
    "Le poulet reste tendre et moelleux."
   ],
   "morceau": "escalopes de poulet",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Assez cher",
+  "kcal_part": 400
  },
  {
   "nom": "Émincé de poulet au citron",
@@ -320,7 +326,9 @@
    "Servir accompagné de salade ou de riz blanc."
   ],
   "morceau": "blanc de poulet",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 260
  },
  {
   "nom": "Suprêmes de pintade à la bière",
@@ -413,7 +421,8 @@
    "Cuire 15 minutes dans un four préchauffé à 220°C en arrosant régulièrement. Servir bien chaud avec des châtaignes sautées, des légumes de saison ou un risotto."
   ],
   "morceau": "suprêmes de pintade",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen"
  },
  {
   "nom": "Poulet rôti",
@@ -453,7 +462,8 @@
    "Pas besoin de l'arroser."
   ],
   "morceau": "poulet entier",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Bon marché"
  },
  {
   "nom": "Échine de porc rôtie à l'ail et au romarin",
@@ -533,7 +543,9 @@
    "Accompagnez avec les légumes de votre choix : haricots verts ou purée."
   ],
   "morceau": "échine de porc avec l'os",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Bon marché",
+  "kcal_part": 210
  },
  {
   "nom": "Épaule d'agneau confite à l'ail et au romarin",
@@ -596,7 +608,9 @@
    "Accompagnez de pommes de terre, d'une salade ou de légumes verts."
   ],
   "morceau": "épaule d'agneau désossée",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen",
+  "kcal_part": 520
  },
  {
   "nom": "Rôti de veau",
@@ -688,7 +702,9 @@
    "Commencer à vérifier la cuisson au bout de 15 minutes avec la pointe d'un couteau."
   ],
   "morceau": "rôti de veau",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen",
+  "kcal_part": 700
  },
  {
   "nom": "Filet mignon à la moutarde",
@@ -734,7 +750,9 @@
    "Servir sans attendre avec des tagliatelles fraîches."
   ],
   "morceau": "filet mignon de porc",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 200
  },
  {
   "nom": "Côtes de porc à la sauce moutarde",
@@ -803,7 +821,9 @@
    "Laissez réduire 5 min."
   ],
   "morceau": "côtes de porc",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 370
  },
  {
   "nom": "Côtes de porc marinées au barbecue (herbes et épices)",
@@ -863,7 +883,9 @@
    "Cuire les côtes de porc au barbecue 15 bonnes minutes."
   ],
   "morceau": "côtes de porc",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 540
  },
  {
   "nom": "Purée de pois cassée aux saucisses de Toulouse",
@@ -926,7 +948,9 @@
    "En fin de cuisson, passer les légumes au presse-purée et servir avec les saucisses."
   ],
   "morceau": "saucisses de Toulouse",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 340
  },
  {
   "nom": "Salade de lentilles au saumon fumé",
@@ -998,7 +1022,9 @@
    "Disposer les lamelles de saumon sur chaque assiette, avec quelques brins de ciboulette."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 1050
  },
  {
   "nom": "Dal épinards et lentilles corail au lait de coco",
@@ -1107,7 +1133,9 @@
    "Ajoutez ce mélange au dal. Enfin, ajoutez le garam masala et la coriandre hachée."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 540
  },
  {
   "nom": "Petit salé aux lentilles vertes, carotte et lardons fumés",
@@ -1171,7 +1199,8 @@
    "C'est prêt. Bon appétit !"
   ],
   "morceau": "lardons fumés",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché"
  },
  {
   "nom": "Curry de pois chiches au lait de coco",
@@ -1240,7 +1269,9 @@
    "Ajouter de la coriandre fraîche pour la présentation et la touche fraîcheur."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 550
  },
  {
   "nom": "Salade de lentilles, pois chiches et thon",
@@ -1306,7 +1337,9 @@
    "Servir froid ou tiède."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 720
  },
  {
   "nom": "Velouté de haricots blancs",
@@ -1361,7 +1394,9 @@
    "Servez bien chaud."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen",
+  "kcal_part": 350
  },
  {
   "nom": "Bavette à l'échalote",
@@ -1424,7 +1459,9 @@
    "Servir avec des pommes de terre rissolées."
   ],
   "morceau": "bavettes",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 310
  },
  {
   "nom": "Wok de bœuf aux poivrons et oignons",
@@ -1507,7 +1544,9 @@
    "Enfin, juste avant de servir, ajouter les noix de cajou ou amandes."
   ],
   "morceau": "steaks",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen",
+  "kcal_part": 810
  },
  {
   "nom": "Brochettes d'agneau à la menthe",
@@ -1570,7 +1609,8 @@
    "Salez et poivrez en fin de cuisson et servez accompagné de semoule de couscous ou de riz au curry."
   ],
   "morceau": "noisettes d'agneau",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen"
  },
  {
   "nom": "Escalopes de dinde aux courgettes et au citron",
@@ -1631,7 +1671,9 @@
    "Quelques minutes avant la fin de la cuisson, ajouter quelques olives noires."
   ],
   "morceau": "escalopes de dinde",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 320
  },
  {
   "nom": "Pavé de saumon à la poêle",
@@ -1695,7 +1737,8 @@
    "Retournez les pavés pour faire dorer brièvement la chair, une trentaine de secondes suffit. Rehaussez de poivre, ajoutez un filet de citron et disposez une petite branche d'aneth en finition."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen"
  },
  {
   "nom": "Omelette blanche aux herbes",
@@ -1765,7 +1808,8 @@
    "Pliez l'omelette en deux. Laissez cuire sur feu doux à moyen, puis retournez. Quand les blancs sont cuits, débarrassez et servez chaud."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché"
  },
  {
   "nom": "Bœuf bourguignon",
@@ -1967,7 +2011,9 @@
    "Egoutter les légumes et la viande, et servir bien chaud avec de la moutarde."
   ],
   "morceau": "bœuf à pot-au-feu",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen",
+  "kcal_part": 330
  },
  {
   "nom": "Blanquette de veau",
@@ -2161,7 +2207,9 @@
    "Laisser cuire 1h30 à 2h selon l'épaisseur des morceaux, jusqu'à ce que la viande se détache de l'os."
   ],
   "morceau": "jarrets de veau",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen",
+  "kcal_part": 430
  },
  {
   "nom": "Joues de porc au cidre",
@@ -2251,7 +2299,8 @@
    "Servir chaud avec une salade verte."
   ],
   "morceau": "lard de poitrine frais",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché"
  },
  {
   "nom": "Chou farci",
@@ -2348,7 +2397,9 @@
    "Cuire à feu doux pendant 1h15."
   ],
   "morceau": "bœuf haché",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen",
+  "kcal_part": 450
  },
  {
   "nom": "Tajine d'agneau citron confit et olives",
@@ -2453,7 +2504,9 @@
    "Couvrir à nouveau et remettre au four 1h."
   ],
   "morceau": "épaule d'agneau coupée en morceaux",
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen",
+  "kcal_part": 600
  },
  {
   "nom": "Coq au vin",
@@ -2662,7 +2715,9 @@
    "Enfourner à 240°C (th. 8) pendant 10 min."
   ],
   "morceau": null,
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Bon marché",
+  "kcal_part": 310
  },
  {
   "nom": "Pavé de saumon sur son lit de poireaux",
@@ -2721,7 +2776,9 @@
    "Fermer hermétiquement avec du papier alu, enfourner à 180-190°C environ 20 min selon la grosseur du saumon."
   ],
   "morceau": null,
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen",
+  "kcal_part": 400
  },
  {
   "nom": "Dos de cabillaud à la moutarde à l'ancienne",
@@ -2792,7 +2849,9 @@
    "Servir le poisson nappé de sauce."
   ],
   "morceau": null,
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Moyen",
+  "kcal_part": 370
  },
  {
   "nom": "Maquereau au four au vin blanc",
@@ -2892,7 +2951,9 @@
    "Placer les maquereaux dans un plat à four et les recouvrir de tranches de citron et des légumes. Passer au four chaud 210°C pendant 15 min."
   ],
   "morceau": null,
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Bon marché",
+  "kcal_part": 1130
  },
  {
   "nom": "Salade de harengs, pommes de terre et radis",
@@ -2975,7 +3036,9 @@
    "Laissez tiédir et versez l'huile, mélangez et ajoutez les radis, les harengs et le persil haché. Relevez d'un trait de vinaigre."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Moyen",
+  "kcal_part": 330
  },
  {
   "nom": "Filet de colin sauce citron",
@@ -3049,7 +3112,9 @@
    "Laisser mijoter quelques minutes et servir !"
   ],
   "morceau": null,
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Bon marché",
+  "kcal_part": 210
  },
  {
   "nom": "Merlu en papillote aux pommes de terre",
@@ -3125,7 +3190,9 @@
    "Ouvrir la papillote et déguster !"
   ],
   "morceau": null,
-  "air_fryer": true
+  "air_fryer": true,
+  "cout": "Bon marché",
+  "kcal_part": 820
  },
  {
   "nom": "Darnes de cabillaud aux poireaux et au curry",
@@ -3190,7 +3257,9 @@
    "Sur un plat, disposez les darnes, placez les pommes de terre autour, nappez le poisson avec la préparation aux poireaux et au curry."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 700
  },
  {
   "nom": "Omelette à l'ail",
@@ -3249,7 +3318,8 @@
    "Il faut qu'elle ait un aspect croustillant de chaque côté."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché"
  },
  {
   "nom": "Steak de thon poêlé",
@@ -3310,7 +3380,9 @@
    "Servir avec un riz au beurre, les oignons confits et de la coriandre hachée."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 750
  },
  {
   "nom": "Blanquette de dinde minute",
@@ -3382,7 +3454,9 @@
    "Et ensuite, déguster !"
   ],
   "morceau": "escalopes de dinde",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 450
  },
  {
   "nom": "Emincé de poulet sauce basilic",
@@ -3442,7 +3516,9 @@
    "Chauffer dans une poêle une cuillère à soupe d'huile d'olive, puis faire cuire rapidement les lamelles de poulet. Mettre alors la crème, le basilic, le sel et le poivre."
   ],
   "morceau": "poulet",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 410
  },
  {
   "nom": "Nouilles chinoises soja et poulet au wok",
@@ -3512,7 +3588,9 @@
    "Terminer en rajoutant dans le wok la coriandre effeuillée et coupée."
   ],
   "morceau": "blancs de poulet",
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 720
  },
  {
   "nom": "Crevettes poêlées au curry et à l'ail",
@@ -3569,6 +3647,8 @@
    "Servir tiède, éventuellement parsemé de coriandre émincée."
   ],
   "morceau": null,
-  "air_fryer": false
+  "air_fryer": false,
+  "cout": "Bon marché",
+  "kcal_part": 380
  }
 ]

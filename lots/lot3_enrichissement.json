@@ -58,7 +58,9 @@
    "Videz le jus de cuisson, ajoutez la crème et grattez le suc.",
    "Rajoutez un peu de curry selon les goûts.",
    "Servez les côtes de porc nappées de sauce."
-  ]
+  ],
+  "cout": "Moyen",
+  "kcal_part": 470
  },
  {
   "nom": "Côtes de porc sauce crème d'échalotes",
@@ -128,7 +130,9 @@
    "Remuez bien et remettez les côtes de porc dans la poêle.",
    "Faire 2 aller / retour pour imprégner les côtes et servir.",
    "Bon appétit !"
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 400
  },
  {
   "nom": "Filet mignon de porc à la crème d'oignon",
@@ -185,7 +189,9 @@
    "Couper le filet mignon en tranches et le faire cuire à la poêle.",
    "Au moment de servir, réchauffer la sauce et en napper les tranches de mignon de porc.",
    "La sauce peut également être servie à part."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 470
  },
  {
   "nom": "Lamelles de porc façon thaï",
@@ -269,7 +275,9 @@
    "Ajouter ensuite les légumes ainsi que la pâte de curry rouge.",
    "Terminez avec les autres ingrédients: la sauce de poisson, la sauce aux huîtres, la sauce chili, le lait de coco, puis laisser mijoter quelques minutes.",
    "Incorporez les nouilles précuites et servez bien chaud."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 590
  },
  {
   "nom": "Crépinette de porc à la poêle",
@@ -383,7 +391,9 @@
    "Rajouter de l'eau régulièrement, dès lors que tout le liquide est évaporé.",
    "Après ce temps, retirer le rôti et les échalotes, puis rectifier la sauce si nécessaire (avec sel et poivre), puis ajouter la crème fraîche selon votre goût.",
    "Couper le rôti en tranches, puis le servir nappé de sauce et accompagné des petites échalotes entières."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 370
  },
  {
   "nom": "Gigot d'agneau à l'ail et au romarin",
@@ -438,7 +448,8 @@
    "Faire pénétrer cette pommade dans la chair en massant le gigot.",
    "Mettre au four et arroser tous les 1/4 d'heure avec un mélange d'eau chaude et de graisse.",
    "Pour ceux qui aiment l'ail confit : pensez à mettre au fond du plat quelques gousses d'ail non épluchées."
-  ]
+  ],
+  "cout": "Moyen"
  },
  {
   "nom": "Filet de bœuf rôti en persillade",
@@ -530,7 +541,9 @@
    "Retirer la viande du four, jeter le jus de cuisson. Laisser refroidir 10 min. Ôter la viande de la cocotte. Déglacer la cocotte : verser 5 cl d'eau et racler les sucs collés au fond à la cuillère en bois. Réserver la sauce dans une saucière.",
    "Replacer la viande dans la cocotte et la badigeonner du beurre persillé. Saupoudrer de chapelure et remettre au four pendant 5 min, en position grill, pour dorer.",
    "Accompagner de pommes dauphines ou purée de carottes."
-  ]
+  ],
+  "cout": "Moyen",
+  "kcal_part": 640
  },
  {
   "nom": "Rôti de dinde au four",
@@ -584,7 +597,8 @@
    "Enfourner pendant 1h à thermostat 6 (180°C). Pour éviter que ça ne sèche, surtout couvrir d'un aluminium ou faire cuire dans une cocotte en verre.",
    "A mi-cuisson, mettre le bouillon cube dilué dans un verre d'eau chaude et saler le rôti.",
    "Vous pouvez le servir chaud avec des endives, des marrons ou le servir froid accompagné de salade."
-  ]
+  ],
+  "cout": "Bon marché"
  },
  {
   "nom": "Rôti de porc Orloff",
@@ -634,7 +648,9 @@
    "Replacer dans le plat de cuisson et arroser avec la crème fraîche.",
    "Remettre au four 10 mn.",
    "Découper complètement, servir en nappant de la sauce qui s'est formée."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 620
  },
  {
   "nom": "Colombo de poulet",
@@ -764,7 +780,9 @@
    "Incorporer le Colombo et bien mélanger. Laisser mijoter encore 15 min, toujours à couvert.",
    "Verser le lait de coco et laisser cuire encore 5 minutes non couvert à feu moyen.",
    "Rectifier l'assaisonnement et servir bien chaud avec du riz."
-  ]
+  ],
+  "cout": "Moyen",
+  "kcal_part": 920
  },
  {
   "nom": "Lapin à la moutarde en cocotte",
@@ -865,7 +883,9 @@
    "Fariner les morceaux de lapin. Assaisonner et mettre à dorer dans une cocotte avec le beurre, l'huile d'olive, les lardons, les échalotes émincées, le bouquet garni, le vin blanc et le bouillon. Laisser mijoter à feu doux pendant 1 h 30.",
    "Ôter les morceaux de lapin et les réserver au chaud.",
    "Enlever la graisse du jus de cuisson et incorporer la moutarde mélangée avec la crème. Assaisonner et replacer le lapin dans la cocotte. Réchauffer et servir."
-  ]
+  ],
+  "cout": "Moyen",
+  "kcal_part": 1020
  },
  {
   "nom": "Curry de porc au lait de coco",
@@ -933,7 +953,9 @@
    "Laisser mijoter 5 mn, puis rajouter la boîte de lait de coco. saler et poivrer, puis remettre le filet dans la marmite.",
    "Laisser mijoter 45 mn, puis 15 mn à feu vif.",
    "Servir avec du riz basmati, de la purée de banane ou faire revenir des morceaux de banane avec un peu de beurre."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 360
  },
  {
   "nom": "Sauté de veau aux légumes",
@@ -1019,7 +1041,9 @@
    "Faire fondre le fond de veau et le bouquet garni. Bien mélanger.",
    "Mettre tous les légumes. Saler et poivrer.",
    "Laisser mijoter pendant 1 h 30, jusqu'à ce que la cocotte le dise..."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 1020
  },
  {
   "nom": "Tajine de poulet aux olives et pommes de terre",
@@ -1124,6 +1148,8 @@
    "Faire mijoter 20 mn, puis ajouter les olives et le citron confit coupé en quatre. Rectifier l'assaisonnement.",
    "Continuer la cuisson 20 mn, et ajouter les pommes de terre épluchées et coupées en morceaux.",
    "Terminer la cuisson 20 mn."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 670
  }
 ]

@@ -67,6 +67,19 @@ CADRE_PRESETS = [
 ]
 
 EXCLUS_DEFAUT = ["abats", "tomate", "champignon", "sucré-salé"]
+# Niveaux de prix affichés par Marmiton (champ facultatif "cout", relevé sur la page source)
+COUTS = ["Très bon marché", "Bon marché", "Moyen", "Assez cher", "Cher"]
+
+
+def infos_facultatives(r):
+    """"cout" et "kcal_part" sont facultatifs (absents quand la source ne les publie pas, ou que
+    ses calories sont incohérentes) ; présents, ils doivent être exploitables par l'app."""
+    pbs = []
+    if "cout" in r and r["cout"] not in COUTS:
+        pbs.append(f"niveau de prix inconnu « {r['cout']} »")
+    if "kcal_part" in r and not (isinstance(r["kcal_part"], int) and 0 < r["kcal_part"] <= 1500):
+        pbs.append(f"calories par part invalides ({r['kcal_part']})")
+    return pbs
 SAVEURS = ["moutarde", "cidre", "curry", "coco", "vin rouge", "vin blanc", "citron confit", "soja"]
 RAYONS = {"Boucherie", "Poissonnerie", "Fruits & légumes", "Crèmerie", "Boulangerie", "Épicerie"}
 
@@ -213,6 +226,10 @@ def valider(recettes):
         if not r.get("proteine"):
             pbs.append(f"{nom}: protéine manquante")
             continue
+        facult = infos_facultatives(r)
+        if facult:
+            pbs.append(f"{nom}: {', '.join(facult)}")
+            continue
         # une recette contenant un exclu par défaut ne doit pas entrer dans la base
         touche = [i["nom"] for i in ingr
                   if any(ex in norm(i.get("nom", "")) for ex in (norm(e) for e in EXCLUS_DEFAUT))]
@@ -243,7 +260,7 @@ def charger_accompagnements(dossier):
     out = []
     for a in lot:
         a["nom"] = nettoyer_nom(a.get("nom", ""))
-        if not a.get("url", "").startswith("http") or not a.get("ingredients"):
+        if not a.get("url", "").startswith("http") or not a.get("ingredients") or infos_facultatives(a):
             continue
         for i in a["ingredients"]:
             if i.get("rayon") not in RAYONS:

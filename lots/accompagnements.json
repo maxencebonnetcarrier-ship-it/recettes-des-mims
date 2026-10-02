@@ -39,7 +39,9 @@
    "Décoller le riz du fond, remuer, laisser bouillir 3 à 4 min.",
    "Couvrir hermétiquement et cuire à feu le plus doux possible pendant au moins 20 min.",
    "Remuer le riz avec une spatule en bois pour l'aérer avant de servir."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 120
  },
  {
   "nom": "Purée de pommes de terre maison",
@@ -93,7 +95,9 @@
    "Passer au moulin à légumes.",
    "Ajouter le lait pour délayer jusqu'à la consistance souhaitée, la crème fraîche pour l'onctuosité et une pincée de muscade râpée.",
    "Rectifier l'assaisonnement et servir bien chaud."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 260
  },
  {
   "nom": "Gratin dauphinois",
@@ -151,7 +155,9 @@
    "Alterner une couche de pommes de terre, crème, ail, sel, poivre jusqu'à épuisement des ingrédients.",
    "Terminer en nappant de crème, sel, poivre.",
    "Mettre au four pendant au moins une heure."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 750
  },
  {
   "nom": "Poêlée de légumes du marché",
@@ -214,7 +220,9 @@
    "Éplucher et râper les carottes, les ajouter et faire chauffer 10 min en rajoutant de l'eau régulièrement (pas d'huile).",
    "Couper la courgette en gros dés et l'ajouter. Laisser cuire à feu moyen jusqu'à ce qu'elle soit fondante, en remuant et en ajoutant de l'eau si besoin.",
    "Rectifier l'assaisonnement et ajouter les épices si souhaité."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 160
  },
  {
   "nom": "Semoule / graine de couscous nature",
@@ -280,7 +288,9 @@
    "La déposer dans le couscoussier au-dessus d'une eau bouillante, bien fermer et attendre 5 à 10 min que la vapeur la traverse.",
    "Verser la semoule dans un saladier, ajouter le beurre en morceaux et bien fouetter à la fourchette.",
    "Ajouter sel, poivre et cannelle, mélanger, laisser tiédir puis rouler une deuxième fois."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 420
  },
  {
   "nom": "Boulgour aux petits légumes",
@@ -358,7 +368,8 @@
    "Faire revenir à part les lardons et les oignons jusqu'à ce qu'ils soient bien dorés.",
    "Une fois le boulgour cuit, y ajouter tous les ingrédients et assaisonner.",
    "Mettre à feu doux jusqu'à ce que tous les légumes soient cuits."
-  ]
+  ],
+  "cout": "Bon marché"
  },
  {
   "nom": "Haricots verts persillés (gremolata)",
@@ -482,7 +493,9 @@
    "Ajouter les pommes de terre, couvrir et cuire à feu doux 30 à 40 min en mélangeant régulièrement.",
    "Passer à feu moyen ou fort sans couvercle 5 min pour bien dorer.",
    "Servir, éventuellement parsemé d'herbes (marjolaine, origan, ciboulette)."
-  ]
+  ],
+  "cout": "Assez cher",
+  "kcal_part": 390
  },
  {
   "nom": "Riz pilaf",
@@ -540,7 +553,9 @@
    "Saler, poivrer et verser le bouillon.",
    "Porter à ébullition puis couvrir et baisser le feu au minimum.",
    "Laisser cuire environ 20 min."
-  ]
+  ],
+  "cout": "Moyen",
+  "kcal_part": 450
  },
  {
   "nom": "Légumes rôtis au four",
@@ -617,7 +632,9 @@
    "Verser l'huile d'olive, saler, poivrer, ajouter les herbes et mélanger.",
    "Cuire dans un four préchauffé à 220°C pendant 45 minutes.",
    "Mélanger toutes les 10 minutes pour bien faire dorer les légumes."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 140
  },
  {
   "nom": "Purée de patate douce",
@@ -679,7 +696,9 @@
    "Les faire cuire à ébullition dans une grande quantité d'eau pendant 10 min.",
    "Passer les patates cuites au mixeur avec la crème et l'huile d'olive.",
    "Saler, poivrer et parfumer de zestes d'agrumes à volonté."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 350
  },
  {
   "nom": "Écrasé de pommes de terre à l'huile d'olive",
@@ -737,6 +756,8 @@
    "Les écraser à l'aide d'une fourchette, en laissant des morceaux.",
    "Ajouter le fromage frais, l'huile d'olive, le sel et le poivre.",
    "Bien mélanger et servir."
-  ]
+  ],
+  "cout": "Bon marché",
+  "kcal_part": 420
  }
 ]

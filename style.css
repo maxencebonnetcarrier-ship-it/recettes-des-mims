@@ -94,6 +94,20 @@ p.empty { font-family: var(--serif); font-style: italic; text-align: center; col
   background: var(--champ); color: var(--ac); font-size: .8rem; line-height: 1; cursor: pointer; vertical-align: 1px;
 }
 .plus { font-size: .8rem; color: var(--mut); margin-top: 2px; }
+/* v33 : accompagnement à prendre, prix et calories */
+.avec-choix { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
+.pris {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--btn-ac); border-radius: 999px;
+  background: var(--champ); color: var(--ac); padding: 6px 12px; font-size: .78rem; font-weight: 600; cursor: pointer;
+}
+.pris.on { background: var(--ac); border-color: var(--ac); color: var(--ac-ink); }
+.remplace-info { font-family: var(--serif); font-style: italic; font-size: .75rem; color: var(--mut); }
+.eco { font-size: .8rem; color: var(--mut); margin-top: 4px; }
+/* échelle à 3 € : les atteints en plein, les autres pâles */
+.prix { font-family: var(--sans); font-style: normal; font-weight: 700; letter-spacing: .03em; color: var(--ac); white-space: nowrap; }
+.prix i { font-style: normal; opacity: .3; }
+.ing-list li.remplace s { opacity: .55; }
+.ing-list li.remplace em { color: var(--ac); font-size: .8rem; }
 .bt {
   display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 12px; margin-top: 12px;
   border-radius: 12px; background: var(--ac); color: var(--ac-ink); font-weight: 700; font-size: .9rem; text-decoration: none;
@@ -200,6 +214,14 @@ button.x:active { background: var(--danger); border-color: var(--danger); color:
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c1b18' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
   }
 }
+/* v33 : choix des jours à acheter, en tête de la liste de courses */
+/* les 8 choix tiennent sur UNE ligne, même sur un téléphone de 360 px */
+.jours-filtre { display: flex; justify-content: center; gap: 4px; padding: 4px 12px 10px; }
+.jours-filtre button {
+  flex: 1 1 0; min-width: 0; max-width: 52px; height: 32px; padding: 0 2px; border-radius: 999px; border: 1px solid var(--btn-ac);
+  background: none; color: var(--soft); font-size: .74rem; font-weight: 600; cursor: pointer;
+}
+.jours-filtre button[aria-pressed="true"] { background: var(--ac); border-color: var(--ac); color: var(--ac-ink); }
 .sn { font-family: var(--serif); font-size: .97rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
 .sp {
   grid-column: 2; min-width: 0; font-family: var(--serif); font-style: italic; font-size: .72rem; color: var(--mut);

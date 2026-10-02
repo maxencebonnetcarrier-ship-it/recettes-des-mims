@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 32;
+  const VERSION_APP = 33;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -163,8 +163,55 @@
 
   const estFavori = (nom) => state.favoris.includes(nom);
   const ACC = () => window.ACCOMPAGNEMENTS || [];
+
+  /* ---------- un article = un ACHAT (v33) ----------
+     Avant, la liste de courses regroupait par nom EXACT et par rayon : « oignon » / « oignons »,
+     « ail » / « gousses d'ail », ou le laurier rangé en Épicerie par une recette et en Fruits &
+     légumes par une autre faisaient deux lignes. Mesuré le 02/10/2026 : des doublons dans
+     40 menus générés sur 40. */
+  const CONTENANT = /^(gousses?|branches?|brins?|bottes?|cubes?) d(e |')/i;
+  // variantes d'écriture d'un même achat → nom affiché dans la liste
+  const MEME_ACHAT_BRUT = {
+    "ail pressé": "ail", "poivre du moulin": "poivre", "poivre noir du moulin": "poivre",
+    "poireaux émincés": "poireaux", "vin blanc sec": "vin blanc",
+    "crème fraîche épaisse": "crème fraîche", "crème épaisse": "crème fraîche",
+    "crème fraîche liquide": "crème liquide", "crème fleurette": "crème liquide",
+    "persil plat": "persil", "romarin frais": "romarin", "échalotes grises": "échalotes",
+    "lardons fumés": "lardons", "citron non traité": "citrons",
+    "filet mignon": "filet mignon de porc", "filets mignons de porc": "filet mignon de porc",
+    "gros sel de mer": "gros sel", "sel de mer": "sel", "gingembre en poudre": "gingembre moulu",
+    "cannelle en poudre": "cannelle", "eau chaude": "eau", "moutarde de Dijon forte": "moutarde",
+    "pomme de terre belle de Fontenay": "pommes de terre", "pomme de terre roseval": "pommes de terre",
+    "pommes de terre nouvelles": "pommes de terre",
+  };
+  // sans accents ni parenthèse ni contenant : « Gousses d'ail » → « ail »
+  const brut = (nom) => norm(nom).replace(/œ/g, "oe").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().replace(CONTENANT, "");
+  // chaque mot au singulier — clé de comparaison seulement, jamais affichée
+  const singulier = (s) => s.split(" ").map((m) => (m.length > 3 && /[sx]$/.test(m) ? m.slice(0, -1) : m)).join(" ");
+  const MEME_ACHAT = {};
+  Object.entries(MEME_ACHAT_BRUT).forEach(([v, n]) => { MEME_ACHAT[singulier(brut(v))] = n; });
+  function achat(nom) {
+    const k = singulier(brut(nom));
+    if (MEME_ACHAT[k]) return { cle: singulier(brut(MEME_ACHAT[k])), affiche: MEME_ACHAT[k] };
+    const affiche = (nom || "").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().replace(CONTENANT, "");
+    return { cle: k, affiche: affiche || nom };
+  }
+
+  /* ---------- accompagnement PRIS (v33) ----------
+     L'accompagnement est une PROPOSITION : il n'entre dans les courses que si on le prend
+     (« Ajouter aux courses »). Pris, il remplace les féculents de la recette (pommes de terre,
+     riz, pâtes…), qui sortent de la liste. Un plat dont le NOM contient déjà son féculent
+     (« Tajine… et pommes de terre », « Penne au poulet ») n'en reçoit pas. */
+  const FECULENT = /\b(pommes? de terre|riz|pates?|penne|spaghetti|tagliatelles?|nouilles?|semoule|boulgour|quinoa|patates? douces?|puree)\b/;
+  const estFeculent = (nom) => FECULENT.test(brut(nom));
+  const platComplet = (r) => FECULENT.test(brut(r.nom));
+  const sideDe = (p, r) => (p && p.side && r && !platComplet(r) ? p.side : null);
+  const sidePris = (p, r) => !!(sideDe(p, r) && p.sideChoisi);
+  const accDe = (side) => (side ? ACC().find((a) => a.nom === side.nom) : null);
+
   // accompagnement qui VARIE : choisi au hasard parmi ceux adaptés à la catégorie du plat
   function pickSide(r, idx, plan) {
+    if (platComplet(r)) return null;
     const compat = ACC().filter((a) => (a.suits || []).includes(r.cat));
     const pool = compat.length ? compat : ACC();
     if (!pool.length) return null;
@@ -532,31 +579,46 @@
   }
 
   // ---------- liste de courses ----------
-  function listeCourses() {
+  const rangRayon = (r) => { const i = ORDRE_RAYONS.indexOf(r); return i < 0 ? 99 : i; };
+  /** Articles à acheter : { rayon: { nomSansAccents: { nom, cle, unites, plats, jours } } }.
+      `jours` (facultatif) limite aux plats de ces jours. Un article = un achat (voir achat()) :
+      son nom est la forme la plus longue rencontrée (« oignons » plutôt que « oignon »), son
+      rayon le plus fréquent. L'accompagnement n'y entre que s'il a été pris (voir sidePris). */
+  function listeCourses(jours) {
     const acc = {};
     if (!state.semaine) return acc;
-    const ajoute = (source, ingredients, parts) => {
+    const vus = {};
+    const ajoute = (jour, source, ingredients, parts, sauf) => {
       const facteur = PARTS_CIBLE / (parts || PARTS_CIBLE);
       (ingredients || []).forEach((ing) => {
+        if (sauf && sauf(ing)) return;
+        const { cle, affiche } = achat(ing.nom);
+        const e = vus[cle] = vus[cle] || { cle, noms: {}, rayons: {}, unites: {}, plats: [], jours: [] };
+        e.noms[affiche] = true;
         const rayon = ing.rayon || "Épicerie";
-        const key = norm(ing.nom);
-        acc[rayon] = acc[rayon] || {};
-        const e = acc[rayon][key] = acc[rayon][key] || { nom: ing.nom, unites: {}, plats: [] };
+        e.rayons[rayon] = (e.rayons[rayon] || 0) + 1;
         if (ing.qte) {
           const u = ing.unite || "";
           e.unites[u] = Math.round(((e.unites[u] || 0) + ing.qte * facteur) * 10) / 10;
         }
         if (!e.plats.includes(source)) e.plats.push(source);
+        if (!e.jours.includes(jour)) e.jours.push(jour);
       });
     };
     state.semaine.plan.forEach((p) => {
+      if (jours && !jours.includes(p.jour)) return;
       const r = getR(p.nom);
-      if (r) ajoute(r.nom, r.ingredients, r.parts_origine);
-      // ingrédients de l'accompagnement du jour
-      if (p.side) {
-        const a = ACC().find((x) => x.nom === p.side.nom);
-        if (a) ajoute(a.nom, a.ingredients, a.parts_origine);
-      }
+      if (!r) return;
+      const a = sidePris(p, r) ? accDe(p.side) : null;
+      // accompagnement pris : il remplace les féculents de la recette
+      ajoute(p.jour, r.nom, r.ingredients, r.parts_origine, a ? (ing) => estFeculent(ing.nom) : null);
+      if (a) ajoute(p.jour, a.nom, a.ingredients, a.parts_origine);
+    });
+    Object.values(vus).forEach((e) => {
+      const nom = Object.keys(e.noms).sort((x, y) => y.length - x.length || x.localeCompare(y))[0];
+      const rayon = Object.keys(e.rayons).sort((x, y) => e.rayons[y] - e.rayons[x] || rangRayon(x) - rangRayon(y))[0];
+      e.jours.sort((x, y) => JOURS.indexOf(x) - JOURS.indexOf(y));
+      (acc[rayon] = acc[rayon] || {})[norm(nom)] = { nom, cle: e.cle, unites: e.unites, plats: e.plats, jours: e.jours };
     });
     return acc;
   }
@@ -590,6 +652,32 @@
   // en-tête commun aux onglets : ornement, nom de l'app, ligne d'information
   const enTete = (orn, ligne, classe) =>
     `<div class="vue-tete">${ornement(orn)}<div class="titre">Chez les Mim's</div>${ligne ? `<div class="${classe || "sous"}">${ligne}</div>` : ""}</div>`;
+
+  /* Prix et calories (v33) : RELEVÉS sur la page source par lots → build_data.py (champs
+     « cout » et « kcal_part »), jamais estimés par l'app. Seul Marmiton les publie : une
+     recette d'une autre source n'affiche rien plutôt qu'un chiffre inventé. */
+  const NIVEAU_PRIX = { "Très bon marché": 1, "Bon marché": 1, "Moyen": 2, "Assez cher": 3, "Cher": 3 };
+  // échelle à 3 € : les atteints en plein, les autres pâles (« €€ » + « € » pâle = Moyen)
+  function prixHtml(r) {
+    const n = r && NIVEAU_PRIX[r.cout];
+    if (!n) return "";
+    return `<span class="prix" role="img" aria-label="Prix : ${esc(r.cout)}" title="Prix : ${esc(r.cout)} (selon ${esc(r.source || "la source")})">${"€".repeat(n)}<i>${"€".repeat(3 - n)}</i></span>`;
+  }
+  /* « ≈ 370 kcal par part » ; avec l'accompagnement pris : le total. SAUF quand il remplace des
+     féculents de la recette : le chiffre de la source les compte déjà, et on ne connaît pas leur
+     part (pas de calories par ingrédient) — additionner compterait deux fois le féculent. */
+  function kcalTexte(r, a, remplaces) {
+    if (!r || !r.kcal_part) return "";
+    if (!a) return `≈ ${r.kcal_part} kcal par part`;
+    if (!a.kcal_part) return `≈ ${r.kcal_part} kcal par part (accompagnement non compté)`;
+    if (remplaces && remplaces.length) return `≈ ${r.kcal_part} kcal par part avec ${remplaces.join(", ")} · ${a.nom} à la place : ≈ ${a.kcal_part} kcal`;
+    return `≈ ${r.kcal_part + a.kcal_part} kcal par part avec ${a.nom}`;
+  }
+  function ligneEco(r, a, remplaces) {
+    const k = kcalTexte(r, a, remplaces);
+    if (!r.cout && !k) return "";
+    return `<div class="eco">${prixHtml(r)}${r.cout ? ` ${esc(r.cout)}` : ""}${r.cout && k ? " · " : ""}${esc(k)}</div>`;
+  }
 
   const dureeTotale = (r) => r.total_min || ((r.prep_min || 0) + (r.cuisson_min || 0));
   const detailDuree = (r) => (r.prep_min && r.cuisson_min) ? `prépa ${fmtDuree(r.prep_min)} + cuisson ${fmtDuree(r.cuisson_min)}` : "";
@@ -639,11 +727,14 @@
   }
 
   // ingrédients (mis à l'échelle), étapes et lien source d'une recette
-  function corpsRecette(r) {
+  // remplacePar : nom de l'accompagnement pris, qui remplace les féculents de la recette
+  function corpsRecette(r, remplacePar) {
     const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
     const ingr = r.ingredients.map((i) => {
       const q = i.qte ? `${Math.round(i.qte * facteur * 10) / 10}${i.unite ? " " + i.unite : ""} ` : "";
-      return `<li><span class="iq">${esc(q)}</span>${esc(i.nom)}
+      const rempl = remplacePar && estFeculent(i.nom);
+      return `<li${rempl ? ' class="remplace"' : ""}><span class="iq">${esc(q)}</span>${rempl
+          ? `<span class="in"><s>${esc(i.nom)}</s> <em>→ ${esc(remplacePar)}</em></span>` : esc(i.nom)}
         <button class="x" data-act="exclure" data-ing="${esc(i.nom)}" title="Je n'aime pas — exclure">✕</button></li>`;
     }).join("");
     const etapes = (r.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
@@ -652,9 +743,9 @@
         ${etapes ? `<p class="det-t">Préparation</p><ol class="step-list">${etapes}</ol>` : ""}
         ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}`;
   }
-  const blocRecette = (r, cle, fin) => `<details class="detail" data-cle="${esc(cle)}">
+  const blocRecette = (r, cle, fin, remplacePar) => `<details class="detail" data-cle="${esc(cle)}">
       <summary>Ingrédients, étapes &amp; source</summary>
-      <div class="det-body">${corpsRecette(r)}${fin || ""}</div>
+      <div class="det-body">${corpsRecette(r, remplacePar)}${fin || ""}</div>
     </details>`;
 
   // titre du plat d'un jour, ou ce qui le remplace quand le jour est vide
@@ -682,10 +773,15 @@
     }
     const detail = detailDuree(r);
     const plus = [r.bonus ? `Le p'tit plus : ${esc(r.bonus)}` : "", esc(cuissonsTexte(r))].filter(Boolean).join(" · ");
+    const side = sideDe(p, r), pris = sidePris(p, r);
+    const feculents = side ? r.ingredients.filter((i) => estFeculent(i.nom)).map((i) => i.nom) : [];
     return `${alerte}
       <div class="duree"><b>${fmtDuree(dureeTotale(r))}</b>${detail ? `<span>${detail}</span>` : ""}</div>
-      ${p.side ? `<div class="avec">avec <a href="${esc(p.side.url)}" target="_blank" rel="noopener">${esc(p.side.nom)}</a>
-        <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement" aria-label="Changer l'accompagnement">↻</button></div>` : ""}
+      ${side ? `<div class="avec">${pris ? "avec" : "idée d'accompagnement :"} <a href="${esc(side.url)}" target="_blank" rel="noopener">${esc(side.nom)}</a>
+        <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement" aria-label="Changer l'accompagnement">↻</button></div>
+        <div class="avec-choix"><button class="pris${pris ? " on" : ""}" data-act="choisir-side" data-jour="${esc(p.jour)}" aria-pressed="${pris}">${pris ? `${icoCoche}Dans les courses` : "+ Ajouter aux courses"}</button>${feculents.length
+          ? `<span class="remplace-info">${pris ? "remplace" : "à la place de"} : ${esc(feculents.join(", "))}</span>` : ""}</div>` : ""}
+      ${ligneEco(r, pris ? accDe(side) : null, feculents)}
       ${plus ? `<div class="plus">${plus}</div>` : ""}
       ${r.url ? `<a class="bt" href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette sur ${esc(r.source || "le site")} ↗</a>` : ""}
       <div class="actions">
@@ -696,7 +792,7 @@
         ${btnFavori(r.nom)}
       </div>
       ${blocRecette(r, "ing-" + p.jour, `<p class="style-jour">Style du jour : ${esc(cadre.note)}</p>
-        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`)}`;
+        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`, pris ? side.nom : null)}`;
   }
   // jour sans plat : demande en attente, ou aucun plat possible
   function corpsJourVide(cadre) {
@@ -726,7 +822,8 @@
   function ligneJour(i, sem, s, cadres) {
     const cadre = cadres[i];
     const { p, r } = platDuJour(s, cadre);
-    const l2 = r ? [p.side ? `avec ${esc(p.side.nom)}` : "", fmtDuree(dureeTotale(r))].filter(Boolean).join(" — ") : "";
+    const l2 = r ? [sidePris(p, r) ? `avec ${esc(p.side.nom)}` : "", fmtDuree(dureeTotale(r))].filter(Boolean).join(" — ")
+      + (prixHtml(r) ? " · " + prixHtml(r) : "") : "";
     return `<details class="jour-ligne${r ? "" : " vide"}" data-cle="jour-${esc(cadre.jour)}">
         <summary><div class="dy">${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r))}</div>
           <div class="n">${nomDuJour(cadre, p, r)}</div>${l2 ? `<div class="l2">${l2}</div>` : ""}</summary>
@@ -763,42 +860,76 @@
     redessiner(el, html);
   }
 
-  // identifiant de la case à cocher d'un article (et d'un « p'tit plus ») : l'écran ET la liste
-  // copiée le lisent, ils doivent donc le calculer de la même façon
-  const idArticle = (rayon, nom) => norm(rayon + "|" + nom);
+  /* Cases à cocher : une par article ET PAR JOUR (v33). Avec le filtre par jour, l'ail acheté
+     pour mercredi ne doit pas paraître acheté pour jeudi. Une ligne est cochée quand toutes
+     ses cases visibles le sont ; la cocher les coche toutes. L'écran ET la liste copiée
+     calculent ces identifiants de la même façon. */
+  const idArticle = (cle, jour) => norm("art|" + cle + "|" + jour);
+  const idsArticle = (it) => it.jours.map((j) => idArticle(it.cle, j));
   const idPlus = (plat) => norm("plus|" + plat);
   const estCoche = (id) => !!state.coursesCochees[id];
+  const toutCoche = (ids) => ids.length > 0 && ids.every(estCoche);
+
+  /* Filtre des courses par jour (v33) : pour ne pas tout acheter d'un coup. Réglage de CET
+     appareil (chacun fait ses courses), oublié au changement de semaine. null = toute la semaine. */
+  const FILTRE_CLE = "mims_courses_jours";
+  function joursFiltres() {
+    try {
+      const f = JSON.parse(localStorage.getItem(FILTRE_CLE));
+      if (f && state.semaine && f.rang === rangDe(state.semaine) && Array.isArray(f.jours)) {
+        const j = JOURS.filter((x) => f.jours.includes(x));
+        if (j.length && j.length < JOURS.length) return j;
+      }
+    } catch (e) { /* stockage illisible : toute la semaine */ }
+    return null;
+  }
+  // « Tout » remet la semaine ; depuis « Tout », un jour touché devient le seul choisi ;
+  // ensuite chaque jour s'ajoute ou se retire
+  function filtrerJour(j) {
+    const avant = joursFiltres();
+    let sel = j === "tous" ? null : !avant ? [j] : avant.includes(j) ? avant.filter((x) => x !== j) : avant.concat(j);
+    if (sel && (!sel.length || sel.length === JOURS.length)) sel = null;
+    try {
+      if (sel) localStorage.setItem(FILTRE_CLE, JSON.stringify({ rang: rangDe(state.semaine), jours: sel }));
+      else localStorage.removeItem(FILTRE_CLE);
+    } catch (e) { /* stockage indisponible : le filtre ne survit pas au rechargement */ }
+  }
+  // « p'tits plus » des plats des jours choisis
+  const plusDesJours = (jours) => (state.semaine ? state.semaine.plan : [])
+    .filter((p) => !jours || jours.includes(p.jour))
+    .map((p) => getR(p.nom)).filter((r) => r && r.bonus).map((r) => ({ plat: r.nom, quoi: r.bonus }));
 
   function renderCourses() {
     const el = document.getElementById("view-courses");
-    const acc = listeCourses();
-    const rayons = ORDRE_RAYONS.filter((r) => acc[r]).concat(Object.keys(acc).filter((r) => !ORDRE_RAYONS.includes(r)));
-    if (!rayons.length) {
+    if (!state.semaine) {
       el.innerHTML = enTete("Liste de courses") + `<p class="empty">Génère d'abord un menu dans l'onglet Semaine.</p>`;
       return;
     }
+    const filtre = joursFiltres();
+    const acc = listeCourses(filtre);
+    const rayons = ORDRE_RAYONS.filter((r) => acc[r]).concat(Object.keys(acc).filter((r) => !ORDRE_RAYONS.includes(r)));
+    const puces = `<div class="jours-filtre" role="group" aria-label="Jours à acheter">
+        <button data-act="filtre-jour" data-jour="tous" aria-pressed="${!filtre}">Tout</button>${JOURS.map((j) =>
+          `<button data-act="filtre-jour" data-jour="${j}" aria-pressed="${!!filtre && filtre.includes(j)}">${j}</button>`).join("")}
+      </div>`;
     let n = 0, html = "";
     rayons.forEach((rayon) => {
       const items = Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom));
       html += `<h3 class="cat-title orn"><i></i>${esc(rayon)}<i></i></h3><div class="shop-list">`;
       items.forEach((it) => {
         n++;
-        const id = idArticle(rayon, it.nom);
-        const ok = estCoche(id);
+        const ids = idsArticle(it);
+        const ok = toutCoche(ids);
         html += `<label class="shop-row ${ok ? "checked" : ""}">
-          <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
+          <input type="checkbox" data-act="course" data-ids="${esc(JSON.stringify(ids))}" ${ok ? "checked" : ""} />
           <span class="sn">${esc(it.nom)}</span>
-          <span class="sp">${esc(it.plats.join(" · "))}</span>
+          <span class="sp">${esc(it.jours.join(", ") + " — " + it.plats.join(" · "))}</span>
         </label>`;
       });
       html += `</div>`;
     });
     // section optionnelle : les « p'tits plus » qui subliment les plats
-    const plus = [];
-    (state.semaine ? state.semaine.plan : []).forEach((p) => {
-      const r = getR(p.nom);
-      if (r && r.bonus) plus.push({ plat: r.nom, quoi: r.bonus });
-    });
+    const plus = plusDesJours(filtre);
     if (plus.length) {
       html += `<h3 class="cat-title orn"><i></i>Pour sublimer (optionnel)<i></i></h3>
         <p class="hint">Pas indispensable — juste le petit truc en plus.</p><div class="shop-list">`;
@@ -806,41 +937,43 @@
         const id = idPlus(it.plat);
         const ok = estCoche(id);
         html += `<label class="shop-row optionnel ${ok ? "checked" : ""}">
-          <input type="checkbox" data-act="course" data-id="${esc(id)}" ${ok ? "checked" : ""} />
+          <input type="checkbox" data-act="course" data-ids="${esc(JSON.stringify([id]))}" ${ok ? "checked" : ""} />
           <span class="sn">${esc(it.quoi)}</span>
           <span class="sp">${esc(it.plat)}</span>
         </label>`;
       });
       html += `</div>`;
     }
+    if (!n) html = `<p class="empty">Rien à acheter pour ${esc(filtre ? filtre.join(", ") : "cette semaine")}.</p>` + html;
     const sem = semaineDuRang(rangDe(state.semaine));
     // « Copier » et « Tout décocher » restent collés en bas de l'écran : avant, il fallait
     // descendre au bout des ~70 articles pour les atteindre
-    el.innerHTML = enTete("Liste de courses", `<strong>${n} articles</strong> · semaine ${sem.num}`, "week-head")
-      + `<p class="hint">Coche ce que tu as déjà. Les quantités sont dans chaque recette (onglet Semaine).</p>`
+    el.innerHTML = enTete("Liste de courses", `<strong>${n} articles</strong> · ${filtre ? esc(filtre.join(", ")) : `semaine ${sem.num}`}`, "week-head")
+      + puces
+      + `<p class="hint">Choisis les jours à acheter, puis coche ce que tu as déjà. Les quantités sont dans chaque recette (onglet Semaine).</p>`
       + html
       + `<div class="barre-bas"><button id="btn-copy" class="cp">${icoCopier}Copier la liste</button>
           <button id="btn-reset-courses" class="lien">Tout décocher</button></div>`;
   }
 
-  /** Texte de « Copier la liste » : seulement ce qui RESTE à acheter. L'écran dit « Coche ce
-      que tu as déjà » — recopier aussi les articles cochés les renvoyait dans le panier.
-      Renvoie "" quand tout est coché. */
+  /** Texte de « Copier la liste » : seulement ce qui RESTE à acheter pour les jours choisis.
+      L'écran dit « Coche ce que tu as déjà » — recopier aussi les articles cochés les
+      renvoyait dans le panier. Renvoie "" quand tout est coché. */
   function texteCourses() {
-    const acc = listeCourses();
-    let out = "🛒 Liste de courses\n", n = 0;
+    const filtre = joursFiltres();
+    const acc = listeCourses(filtre);
+    let out = `🛒 Liste de courses${filtre ? " — " + filtre.join(", ") : ""}\n`, n = 0;
     ORDRE_RAYONS.filter((r) => acc[r]).forEach((rayon) => {
-      const reste = Object.values(acc[rayon]).filter((it) => !estCoche(idArticle(rayon, it.nom)))
+      const reste = Object.values(acc[rayon]).filter((it) => !toutCoche(idsArticle(it)))
         .sort((a, b) => a.nom.localeCompare(b.nom));
       if (!reste.length) return;
       out += `\n— ${rayon} —\n`;
       reste.forEach((it) => { out += `• ${it.nom}\n`; n++; });
     });
-    const plus = (state.semaine ? state.semaine.plan : [])
-      .map((p) => getR(p.nom)).filter((r) => r && r.bonus && !estCoche(idPlus(r.nom)));
+    const plus = plusDesJours(filtre).filter((it) => !estCoche(idPlus(it.plat)));
     if (plus.length) {
       out += `\n— Pour sublimer (optionnel) —\n`;
-      plus.forEach((r) => { out += `• ${r.bonus} (${r.nom})\n`; n++; });
+      plus.forEach((it) => { out += `• ${it.quoi} (${it.plat})\n`; n++; });
     }
     return n ? out : "";
   }
@@ -852,6 +985,7 @@
     const cats = [...new Set(RECIPES.map((r) => r.cat))];
     const dispo = RECIPES.filter((r) => !estExclu(r)).length;
     let html = enTete("Le carnet de recettes", `${RECIPES.length} recettes · ${dispo} disponibles`)
+      + `<p class="hint">€ bon marché · €€ moyen · €€€ assez cher. Prix et calories par part relevés sur Marmiton, quand le site les donne.</p>`
       + `<label class="recherche">${icoLoupe}<input id="search" type="search" autocomplete="off" placeholder="Chercher une recette, un ingrédient…" /></label>`;
     cats.forEach((cat) => {
       const liste = RECIPES.filter((r) => r.cat === cat);
@@ -862,7 +996,7 @@
         const detail = detailDuree(r);
         html += `<div class="recipe ${ex ? "excluded" : ""}" data-search="${esc(norm(r.nom + " " + r.ingredients.map((i) => i.nom).join(" ") + " " + (r.tags || []).join(" ")))}">
           <details data-cle="rec-${esc(r.nom)}">
-            <summary><span class="n">${esc(r.nom)}${ex ? `<span class="tag">exclue</span>` : ""}</span><span class="m">${esc(meta)}</span></summary>
+            <summary><span class="n">${esc(r.nom)}${ex ? `<span class="tag">exclue</span>` : ""}</span><span class="m">${prixHtml(r)}${prixHtml(r) ? " " : ""}${esc(meta)}${r.kcal_part ? esc(` · ≈ ${r.kcal_part} kcal`) : ""}</span></summary>
             <div class="det-body">
               ${detail ? `<p class="plus">${fmtDuree(dureeTotale(r))} : ${detail}</p>` : ""}
               ${r.bonus ? `<p class="plus">Le p'tit plus : ${esc(r.bonus)}</p>` : ""}
@@ -1213,12 +1347,23 @@
         const pool = (compat.length ? compat : ACC()).filter((a) => !p.side || a.nom !== p.side.nom);
         if (pool.length) {
           const a = pool[Math.floor(Math.random() * pool.length)];
+          // un accompagnement déjà pris reste pris : on change seulement lequel
           p.side = { nom: a.nom, url: a.url, source: a.source };
           save("semaine"); renderSemaine();
         } else toast("Pas d'autre accompagnement adapté");
       }
       return;
     }
+    if (act === "choisir-side") {
+      const p = state.semaine.plan.find((x) => x.jour === t.dataset.jour);
+      if (p && p.side) {
+        p.sideChoisi = !p.sideChoisi;
+        save("semaine"); renderSemaine();
+        toast(p.sideChoisi ? `${p.side.nom} ajouté aux courses` : `${p.side.nom} retiré des courses`);
+      }
+      return;
+    }
+    if (act === "filtre-jour") { filtrerJour(t.dataset.jour); return renderCourses(); }
     if (act === "exclure") {
       const ing = t.dataset.ing;
       if (ajouterExclusion(ing)) {
@@ -1345,9 +1490,14 @@
                                    : "Recettes de saison privilégiées");
     }
     if (e.target.dataset.act === "course") {
-      const id = e.target.dataset.id;
-      if (e.target.checked) state.coursesCochees[id] = true; else delete state.coursesCochees[id];
-      save(null, id, !e.target.checked);
+      // une ligne porte une case par jour où l'article sert (voir idArticle) — en JSON, car un
+      // identifiant contient des espaces (« blanc de poulet ») et des virgules (noms de plats)
+      let ids = [];
+      try { ids = JSON.parse(e.target.dataset.ids || "[]"); } catch (err) { ids = []; }
+      ids.forEach((id) => {
+        if (e.target.checked) state.coursesCochees[id] = true; else delete state.coursesCochees[id];
+        save(null, id, !e.target.checked);
+      });
       e.target.closest(".shop-row").classList.toggle("checked", e.target.checked);
     }
   });
