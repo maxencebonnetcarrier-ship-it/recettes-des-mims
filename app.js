@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 34;
+  const VERSION_APP = 37;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -132,6 +132,7 @@
   if (!state.epingles) state.epingles = {};     // jour → recette imposée pour la semaine en cours
   if (state.saisonOff === undefined) state.saisonOff = false;  // filtre « de saison » actif par défaut
   if (!Array.isArray(state.servis)) state.servis = [];  // menus des semaines passées : { an, num, noms }
+  if (state.suivante === undefined) state.suivante = null;  // menu préparé de la semaine prochaine (S+1, v36)
 
   /* ---------- apparence (v32) ----------
      « auto » suit le téléphone ; « clair » et « sombre » le forcent. C'est un réglage de CET
@@ -237,7 +238,19 @@
     state.promos.push(m); save("promos"); return true;
   }
 
-  const estExclu = (r) => r.ingredients.some((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))));
+  /* Exclusions qui ne sont le NOM d'aucun ingrédient (v35). build_data.py les reconnaît sur la recette entière et
+     range les ingrédients en cause dans r.tomate_crue / r.sucre_sale. Comparées aux noms comme les autres,
+     « sucré-salé » n'écartait jamais rien (constaté le 2026-10-03). « tomate » seule vaut « tomate crue » :
+     l'exclusion par défaut s'appelait ainsi, et elle est enregistrée sur chaque téléphone (et le hub). Choix de
+     l'utilisateur du 2026-10-03 : « sans tomate crue mais sans champi » — sauce, concentré, tomate cuite permis. */
+  const EXCLUSIONS_RECETTE = { "tomate": "tomate_crue", "tomate crue": "tomate_crue",
+                               "sucre-sale": "sucre_sale", "sucre sale": "sucre_sale" };
+  const exclusParRegle = (r, ex) => {
+    const champ = EXCLUSIONS_RECETTE[norm(ex)];
+    if (champ) return r[champ] || [];
+    return (r.ingredients || []).filter((i) => norm(i.nom).includes(norm(ex))).map((i) => i.nom);
+  };
+  const estExclu = (r) => state.exclusions.some((ex) => exclusParRegle(r, ex).length > 0);
 
   function ajouterExclusion(mot) {
     const m = (mot || "").trim();
@@ -300,15 +313,17 @@
   }
 
   /* Choisit une recette en évitant : la protéine des jours adjacents (règle dure),
-     la même protéine plus de 2x dans la semaine, et une saveur déjà utilisée. */
-  function choisir(cadre, interdites, plan, idx) {
+     la même protéine plus de 2x dans la semaine, et une saveur déjà utilisée.
+     `garder` (facultatif) ne retient que certaines recettes : envie d'un ingrédient (v36). */
+  function choisir(cadre, interdites, plan, idx, garder) {
     const protPrec = idx > 0 && plan[idx - 1] ? plan[idx - 1].proteine : null;
     const protSuiv = plan[idx + 1] ? plan[idx + 1].proteine : null;
     const compteProt = {};
     plan.forEach((p, i) => { if (p && i !== idx) compteProt[p.proteine] = (compteProt[p.proteine] || 0) + 1; });
     const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
+    const garde = garder || (() => true);
 
-    let pool = candidats(cadre, interdites);
+    let pool = candidats(cadre, interdites).filter(garde);
     if (!pool.length) {
       // Repli : on relâche la saison et l'anti-répétition, JAMAIS le temps ni la protéine —
       // sinon un jour « Express ≤15 min » pourrait servir un mijoté de 3 h.
@@ -316,7 +331,7 @@
         cadre.cats.includes(r.cat) && !estExclu(r) &&
         (!cadre.maxMin || (r.total_min || 0) <= cadre.maxMin) &&
         (!cadre.proteine || PROT_SPORT.has(norm(r.proteine)))
-      );
+      ).filter(garde);
     }
     if (!pool.length) return null;
 
@@ -383,42 +398,60 @@
   /* ---------- recettes épinglées (imposées sur un jour précis) ---------- */
 
   const epinglesDe = () => state.epingles || (state.epingles = {});
+  /* v37 : un plat imposé pour la SEMAINE PROCHAINE est rangé sous « Mar+1 » (même convention
+     que les jours « S+1 » des courses). Cas d'origine : une envie demandée pour un jour déjà
+     passé re-tirait toute la semaine en cours et le plat n'était jamais servi. Le lundi venu,
+     « Mar+1 » devient « Mar » (voir purgerEpingles). s1 = vrai pour la semaine prochaine. */
+  const cleEpingle = (jour, s1) => (s1 ? jour + "+1" : jour);
   // une entrée peut être une pierre tombale { nom: null } : un désépinglage doit se
   // PROPAGER à l'autre téléphone, ce qu'une simple suppression ne ferait pas.
-  const nomEpingle = (jour) => {
-    const e = epinglesDe()[jour];
+  const nomEpingle = (jour, s1) => {
+    const e = epinglesDe()[cleEpingle(jour, s1)];
     if (!e) return null;
+    if (s1 && rangDe(e) !== rangCourant() + 1) return null;   // périmée, pas encore purgée
     return typeof e === "string" ? e : (e.nom || null);
   };
+  const semaineEpingle = (s1) => (s1 ? semaineDuRang(rangCourant() + 1) : semaineCourante());
 
   /** Impose une recette sur un jour. Une seule par jour : la nouvelle remplace l'ancienne.
-      On mémorise la SEMAINE de pose : une épingle ne vaut que pour la semaine en cours. */
-  function epingler(jour, nom) {
+      On mémorise la SEMAINE visée : une épingle ne vaut que pour elle. */
+  function epingler(jour, nom, s1) {
     if (!jour || !nom) return false;
-    const sem = semaineCourante();
-    epinglesDe()[jour] = { nom: nom, t: Date.now(), num: sem.num, an: sem.an };
+    const sem = semaineEpingle(s1);
+    epinglesDe()[cleEpingle(jour, s1)] = { nom: nom, t: Date.now(), num: sem.num, an: sem.an };
     save("epingles");
     return true;
   }
 
-  /** Retire les épingles posées une semaine précédente. Sans ça, un plat imposé une fois
-      le resterait indéfiniment — l'inverse de ce qui est promis à l'utilisateur. */
+  /** Retire les épingles d'une semaine terminée. Sans ça, un plat imposé une fois le resterait
+      indéfiniment — l'inverse de ce qui est promis à l'utilisateur. Une épingle « S+1 » dont la
+      semaine est arrivée devient l'épingle du jour (la plus récente gagne en cas de conflit). */
   function purgerEpingles(rang) {
     const e = epinglesDe();
     let change = false;
-    Object.keys(e).forEach((j) => {
-      if (rangDe(e[j]) !== rang) { delete e[j]; change = true; }
+    Object.keys(e).forEach((k) => {
+      const v = e[k];
+      if (/\+1$/.test(k)) {
+        if (rangDe(v) === rang + 1) return;
+        if (rangDe(v) === rang) {
+          const j = k.slice(0, -2), cur = e[j];
+          if (!cur || rangDe(cur) !== rang || (cur.t || 0) <= (v.t || 0)) e[j] = v;
+        }
+        delete e[k]; change = true;
+        return;
+      }
+      if (rangDe(v) !== rang) { delete e[k]; change = true; }
     });
     if (change) save("epingles");
     return change;
   }
 
-  function desepingler(jour) {
-    if (!nomEpingle(jour)) return false;
+  function desepingler(jour, s1) {
+    if (!nomEpingle(jour, s1)) return false;
     // pierre tombale plutôt que suppression : sinon l'autre téléphone, qui a encore
     // l'épingle, la renverrait à la prochaine synchro et elle réapparaîtrait toute seule.
-    const sem = semaineCourante();
-    epinglesDe()[jour] = { nom: null, t: Date.now(), num: sem.num, an: sem.an };
+    const sem = semaineEpingle(s1);
+    epinglesDe()[cleEpingle(jour, s1)] = { nom: null, t: Date.now(), num: sem.num, an: sem.an };
     save("epingles");
     return true;
   }
@@ -437,9 +470,7 @@
     return e;
   }
 
-  const ingredientsExclus = (r) => (r.ingredients || [])
-    .filter((i) => state.exclusions.some((ex) => norm(i.nom).includes(norm(ex))))
-    .map((i) => i.nom);
+  const ingredientsExclus = (r) => [...new Set(state.exclusions.flatMap((ex) => exclusParRegle(r, ex)))];
 
   /** Signale deux jours VOISINS qui servent la même protéine. Le cas ne peut venir que
       d'épingles (le générateur l'interdit), mais il ne doit pas passer sous silence. */
@@ -465,11 +496,15 @@
   function appliquerExclusion() {
     if (!state.semaine) return 0;
     let n = 0;
-    state.semaine.plan.slice().forEach((p) => {
-      const r = getR(p.nom);
-      if (!r || !estExclu(r)) return;
-      if (p.epingle) return;                    // imposé : on le garde et on l'annote
-      if (regenJour(p.jour) !== "epingle") n++;
+    // la semaine prochaine déjà préparée aussi (v36) : elle ne doit pas garder un plat exclu
+    [state.semaine, semaineSuivante()].forEach((s) => {
+      if (!s) return;
+      s.plan.slice().forEach((p) => {
+        const r = getR(p.nom);
+        if (!r || !estExclu(r)) return;
+        if (p.epingle) return;                  // imposé : on le garde et on l'annote
+        if (regenJour(p.jour, s) !== "epingle") n++;
+      });
     });
     rafraichirAlertes();                        // recalcule aussi les jours épinglés
     return n;
@@ -477,15 +512,54 @@
 
   function rafraichirAlertes() {
     if (!state.semaine) return;
-    state.semaine.plan.forEach((p) => {
-      if (!p.epingle) return;
-      const r = getR(p.nom);
-      if (!r) return;
-      const exclus = ingredientsExclus(r);
-      if (exclus.length) p.exclusAlerte = exclus; else delete p.exclusAlerte;
+    const s1 = semaineSuivante();
+    [state.semaine, s1].forEach((s) => {
+      if (!s) return;
+      s.plan.forEach((p) => {
+        if (!p.epingle) return;
+        const r = getR(p.nom);
+        if (!r) return;
+        const exclus = ingredientsExclus(r);
+        if (exclus.length) p.exclusAlerte = exclus; else delete p.exclusAlerte;
+      });
+      marquerProteinesVoisines(s.plan);
     });
-    marquerProteinesVoisines(state.semaine.plan);
     save("semaine");
+    if (s1) save("suivante");
+  }
+
+  /* ---------- semaine suivante (S+1, v36) ----------
+     Le menu de la semaine prochaine se prépare d'avance (onglet Semaine › « Semaine
+     prochaine »), pour faire les courses avant le lundi. Il est rangé dans `state.suivante`,
+     partagé par la synchro. Le lundi venu, il DEVIENT le menu de la semaine au lieu d'un
+     nouveau tirage : sinon les courses faites pour lui ne correspondraient plus à rien.
+     Les deux semaines s'excluent l'une l'autre (pas le même plat d'une semaine à l'autre). */
+  function semaineSuivante() {
+    const s = state.suivante;
+    return s && Array.isArray(s.plan) && s.plan.length && rangDe(s) === rangCourant() + 1 ? s : null;
+  }
+  const nomsPlan = (s) => (s && Array.isArray(s.plan) ? s.plan.map((p) => p && p.nom).filter(Boolean) : []);
+  // l'autre semaine montrée : S+1 pour la semaine courante, la semaine courante pour S+1
+  const autreSemaine = (s) => (s === state.semaine ? semaineSuivante()
+    : (state.semaine && rangDe(state.semaine) === rangDe(s) - 1 ? state.semaine : null));
+  const champDe = (s) => (s === state.suivante ? "suivante" : "semaine");
+
+  // jours sans plat imposé, posés d'après le cadre : protéine la plus FORCÉE d'abord
+  function composer(cadre, interdites, plan) {
+    // les autres jours se génèrent autour et VOIENT les protéines déjà posées : un plat
+    // imposé n'échappe donc pas à l'anti-répétition, il la contraint.
+    // Jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
+    // pour que les jours souples (Express, Mijoté) s'adaptent ensuite et évitent l'adjacence.
+    const ordre = cadre.map((c, i) => {
+      const cand = candidats(c, interdites);
+      return { i, prot: new Set(cand.map((r) => r.proteine)).size || 99, n: cand.length };
+    }).filter((o) => !plan[o.i])
+      .sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
+    for (const i of ordre) {
+      const r = choisir(cadre[i], interdites, plan, i);
+      if (r) plan[i] = entreePlan(cadre[i].jour, r, i, plan, false);
+    }
+    return plan;
   }
 
   function generer() {
@@ -493,14 +567,39 @@
     const rang = rangSemaine(sem.an, sem.num);
     // le menu d'une semaine TERMINÉE est noté avant d'être remplacé
     noterMenuServi(rang);
+    // 0) une épingle ne vaut QUE pour la semaine où elle a été posée ; une envie
+    //    d'ingrédient aussi ; une case de courses aussi (v36).
+    purgerEpingles(rang);
+    purgerEnvies(rang);
+    purgerCourses(rang);
     const cadre = getCadre();
+
+    // 1) changement de semaine avec une S+1 préparée : elle devient le menu tel quel.
+    const prete = state.suivante && rangDe(state.suivante) === rang && Array.isArray(state.suivante.plan)
+      && state.suivante.plan.length && (!state.semaine || rangDe(state.semaine) !== rang);
+    if (prete) {
+      const plan = state.suivante.plan;
+      // une épingle posée pour cette semaine (depuis l'autre téléphone) prime quand même
+      cadre.forEach((c) => {
+        const r = trouverRecette(nomEpingle(c.jour));
+        const k = plan.findIndex((p) => p.jour === c.jour);
+        if (r && k >= 0 && plan[k].nom !== r.nom) plan[k] = entreePlan(c.jour, r, k, plan, true);
+      });
+      state.semaine = { num: sem.num, an: sem.an, plan };
+      state.suivante = null; save("suivante");
+      appliquerEnviesIngredient(state.semaine);
+      rafraichirAlertes();                       // protéines voisines + enregistre la semaine
+      return state.semaine;
+    }
+    if (state.suivante && rangDe(state.suivante) !== rang + 1) { state.suivante = null; save("suivante"); }
+
     const interdites = recentes(rang - 1);
+    nomsPlan(semaineSuivante()).forEach((n) => interdites.add(n));   // déjà prévus la semaine prochaine
+    // et ceux déjà imposés pour la semaine prochaine, même si son menu n'est pas encore préparé
+    JOURS.forEach((j) => { const r = trouverRecette(nomEpingle(j, true)); if (r) interdites.add(r.nom); });
     const plan = new Array(cadre.length).fill(null);
 
-    // 0) une épingle ne vaut QUE pour la semaine où elle a été posée.
-    purgerEpingles(rang);
-
-    // 1) les jours ÉPINGLÉS sont posés AVANT tout le reste : ils priment sur le cadre du
+    // 2) les jours ÉPINGLÉS sont posés AVANT tout le reste : ils priment sur le cadre du
     //    jour, sur les exclusions et sur l'historique — c'est un choix délibéré assumé.
     //    Un nom encore absent de la base (envie en attente d'ajout) laisse le jour libre.
     cadre.forEach((c, i) => {
@@ -513,39 +612,156 @@
       plan[i] = entreePlan(c.jour, r, i, plan, true);
     });
 
-    // 2) les autres jours se génèrent autour et VOIENT les protéines déjà posées : un plat
-    //    imposé n'échappe donc pas à l'anti-répétition, il la contraint.
-    //    Jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
-    //    pour que les jours souples (Express, Mijoté) s'adaptent ensuite et évitent l'adjacence.
-    const ordre = cadre.map((c, i) => {
-      const cand = candidats(c, interdites);
-      return { i, prot: new Set(cand.map((r) => r.proteine)).size || 99, n: cand.length };
-    }).filter((o) => !plan[o.i])
-      .sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
-    for (const i of ordre) {
-      const r = choisir(cadre[i], interdites, plan, i);
-      if (r) plan[i] = entreePlan(cadre[i].jour, r, i, plan, false);
-    }
+    // 3) les autres jours autour
+    composer(cadre, interdites, plan);
     state.semaine = { num: sem.num, an: sem.an, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
+    appliquerEnviesIngredient(state.semaine);
     save("semaine");
     return state.semaine;
   }
 
-  function regenJour(jour) {
-    const s = state.semaine;
+  /** Prépare (ou refait) le menu de la semaine prochaine. Les plats de cette semaine comptent
+      comme déjà servis : la règle « pas deux fois en 3 semaines » vaut aussi pour S+1. Seuls
+      les plats imposés POUR la semaine prochaine (clés « Mar+1 », v37) s'y appliquent. */
+  function genererSuivante() {
+    const rang = rangCourant() + 1;
+    const sem = semaineDuRang(rang);
+    const cadre = getCadre();
+    const interdites = recentes(rang - 1);
+    nomsPlan(state.semaine && rangDe(state.semaine) === rang - 1 ? state.semaine : null).forEach((n) => interdites.add(n));
+    const plan = new Array(cadre.length).fill(null);
+    // les plats imposés pour la semaine prochaine (v37) sont posés d'abord, comme dans generer()
+    cadre.forEach((c, i) => {
+      const demande = nomEpingle(c.jour, true);
+      const r = trouverRecette(demande);
+      if (!r) return;
+      if (r.nom !== demande) { epinglesDe()[cleEpingle(c.jour, true)].nom = r.nom; save("epingles"); }
+      plan[i] = entreePlan(c.jour, r, i, plan, true);
+    });
+    composer(cadre, interdites, plan);
+    state.suivante = { num: sem.num, an: sem.an, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
+    appliquerEnviesIngredient(state.suivante);
+    save("suivante");
+    return state.suivante;
+  }
+
+  /** Applique au menu S+1 DÉJÀ préparé le plat imposé pour ce jour, sans retirer au sort les
+      autres jours (les courses faites d'avance restent justes). Si ce plat était déjà prévu un
+      autre jour de S+1, cet autre jour est changé. Renvoie vrai si le menu a changé. */
+  function imposerSuivante(jour) {
+    const s = semaineSuivante();
+    const demande = nomEpingle(jour, true);
+    const r = trouverRecette(demande);
+    if (!s || !r) return false;
+    if (r.nom !== demande) { epinglesDe()[cleEpingle(jour, true)].nom = r.nom; save("epingles"); }
+    let idx = s.plan.findIndex((p) => p.jour === jour);
+    if (idx < 0) { s.plan.push({ jour }); s.plan.sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)); idx = s.plan.findIndex((p) => p.jour === jour); }
+    s.plan[idx] = entreePlan(jour, r, idx, s.plan, true);
+    s.plan.forEach((p) => { if (p.jour !== jour && p.nom === r.nom && !nomEpingle(p.jour, true)) regenJour(p.jour, s); });
+    marquerProteinesVoisines(s.plan);
+    save("suivante");
+    return true;
+  }
+  /** Le jour redevient automatique dans S+1 : un autre plat y est tiré. */
+  function libererSuivante(jour) {
+    const s = semaineSuivante();
+    const p = s && s.plan.find((x) => x.jour === jour);
+    if (!p || !p.epingle) return;
+    delete p.epingle; delete p.horsCadre; delete p.exclusAlerte;
+    regenJour(jour, s);
+    save("suivante");
+  }
+
+  // s : la semaine visée (courante par défaut, ou S+1)
+  function regenJour(jour, s) {
+    s = s || state.semaine;
+    const courante = s === state.semaine;
     const idx = s.plan.findIndex((p) => p.jour === jour);
     if (idx < 0) return;
     // un jour épinglé est un choix explicite : on ne le tire pas au sort dans son dos.
     // Il faut d'abord retirer l'épingle (bouton « Ne plus imposer »).
-    if (nomEpingle(jour)) return "epingle";
+    if (nomEpingle(jour, !courante)) return "epingle";
     const cadre = getCadre().find((c) => c.jour === jour);
     const interdites = recentes(rangDe(s) - 1);
+    nomsPlan(autreSemaine(s)).forEach((n) => interdites.add(n));
     s.plan.forEach((p) => interdites.add(p.nom));   // exclut TOUTE la semaine, dont le plat actuel → force un vrai changement
     const copie = s.plan.slice(); copie[idx] = null;
-    let r = choisir(cadre, interdites, copie, idx);
+    // un jour choisi pour une ENVIE d'ingrédient le garde quand on le change
+    const envie = s.plan[idx].envie;
+    const garder = envie ? (r) => contientIngr(r, envie) : null;
+    let r = choisir(cadre, interdites, copie, idx, garder);
+    if (!r && garder) r = choisir(cadre, interdites, copie, idx);
     // si un seul candidat existe (plat actuel ré-exclu), on relâche pour ne pas planter
     if (!r) { interdites.delete(s.plan[idx].nom); r = choisir(cadre, interdites, copie, idx); }
-    if (r) { s.plan[idx] = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) }; save("semaine"); }
+    if (r) {
+      const e = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) };
+      if (envie && contientIngr(r, envie)) e.envie = envie;
+      s.plan[idx] = e;
+      marquerProteinesVoisines(s.plan);
+      save(champDe(s));
+    }
+  }
+
+  /* ---------- envies par INGRÉDIENT (v36) ----------
+     « J'ai envie de poireaux (jeudi) » : un plat de la base qui en contient est mis au menu ce
+     jour-là — ou, sans jour, sur un des jours qui restent. Ce n'est PAS une épingle : le plat
+     choisi respecte le style du jour, l'anti-répétition et les exclusions, et « Changer » en
+     propose un autre avec le même ingrédient. L'envie vise UNE semaine (cette semaine si le
+     jour n'est pas passé, sinon la suivante) et s'efface quand cette semaine est finie. */
+  const cleIngr = (t) => singulier(brut(t));
+  function contientIngr(r, ing) {
+    const c = cleIngr(ing);
+    return c.length >= 3 && !!r && (r.ingredients || []).some((i) => cleIngr(i.nom).includes(c));
+  }
+  const recettesAvec = (ing) => RECIPES.filter((r) => contientIngr(r, ing));
+  const estEnvieIngr = (e) => !!(e && typeof e === "object" && e.type === "ingredient");
+  const enviesIngrPour = (s) => state.envies.filter((e) => estEnvieIngr(e) && rangDe(e) !== null && rangDe(e) === rangDe(s));
+  function purgerEnvies(rang) {
+    const avant = state.envies.length;
+    state.envies = state.envies.filter((e) => !estEnvieIngr(e) || rangDe(e) === null || rangDe(e) >= rang);
+    if (state.envies.length !== avant) save("envies");
+  }
+  /** Place dans la semaine s un plat contenant chaque ingrédient demandé pour elle. Renvoie les
+      jours changés. Un jour passé (semaine courante) ou imposé n'est jamais touché. */
+  function appliquerEnviesIngredient(s) {
+    const changes = [];
+    if (!s || !Array.isArray(s.plan)) return changes;
+    const courante = rangDe(s) === rangCourant();
+    const debut = courante ? indexAujourdhui() : 0;
+    enviesIngrPour(s).forEach((e) => {
+      const deja = s.plan.find((p) => (!e.jour || p.jour === e.jour) && JOURS.indexOf(p.jour) >= debut && contientIngr(getR(p.nom), e.nom));
+      if (deja) { deja.envie = e.nom; return; }
+      const jours = (e.jour ? [e.jour] : getCadre().map((c) => c.jour))
+        .filter((j) => JOURS.indexOf(j) >= debut && !nomEpingle(j, !courante));
+      for (const j of jours) {
+        if (remplacerPourEnvie(s, j, e.nom, !!e.jour)) { changes.push(j); break; }
+      }
+    });
+    if (changes.length) marquerProteinesVoisines(s.plan);
+    return changes;
+  }
+  // horsStyle : avec un jour précis, on accepte un plat d'un autre style plutôt que rien
+  function remplacerPourEnvie(s, jour, ing, horsStyle) {
+    const cadre = getCadre().find((c) => c.jour === jour);
+    if (!cadre) return false;
+    const idx = s.plan.findIndex((p) => p.jour === jour);
+    const interdites = recentes(rangDe(s) - 1);
+    nomsPlan(autreSemaine(s)).forEach((n) => interdites.add(n));
+    s.plan.forEach((p, k) => { if (k !== idx) interdites.add(p.nom); });
+    const copie = s.plan.slice(); if (idx >= 0) copie[idx] = null;
+    const garder = (r) => contientIngr(r, ing);
+    let r = choisir(cadre, interdites, copie, idx, garder), hors = false;
+    if (!r && horsStyle) {
+      const tous = { cats: [...new Set(RECIPES.map((x) => x.cat))], maxMin: null };
+      r = choisir(tous, interdites, copie, idx, garder);
+      hors = !!r;
+    }
+    if (!r) return false;
+    const e = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie), envie: ing };
+    if (hors) e.horsCadre = cadre.cats.join(" / ");
+    if (idx >= 0) s.plan[idx] = e;
+    else { s.plan.push(e); s.plan.sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)); }
+    return true;
   }
 
   const getR = (nom) => RECIPES.find((r) => r.nom === nom);
@@ -584,6 +800,20 @@
       `jours` (facultatif) limite aux plats de ces jours. Un article = un achat (voir achat()) :
       son nom est la forme la plus longue rencontrée (« oignons » plutôt que « oignon »), son
       rayon le plus fréquent. L'accompagnement n'y entre que s'il a été pris (voir sidePris). */
+  /* Jours de courses (v36) : « Lun » = lundi de cette semaine, « Lun+1 » = lundi de la semaine
+     prochaine (S+1). Sans filtre, seule la semaine courante compte. */
+  const estJourS1 = (k) => /\+1$/.test(k);
+  const jourDe = (k) => (estJourS1(k) ? k.slice(0, -2) : k);
+  const ordreJour = (k) => JOURS.indexOf(jourDe(k)) + (estJourS1(k) ? 7 : 0);
+  const libJour = (k) => (estJourS1(k) ? `${jourDe(k)} S+1` : k);
+  // les plats des jours demandés, de cette semaine et de S+1 : [{ cle, p }]
+  function platsDesJours(jours) {
+    const out = [];
+    if (state.semaine) state.semaine.plan.forEach((p) => { if (!jours || jours.includes(p.jour)) out.push({ cle: p.jour, p }); });
+    const s1 = semaineSuivante();
+    if (s1 && jours) s1.plan.forEach((p) => { if (jours.includes(p.jour + "+1")) out.push({ cle: p.jour + "+1", p }); });
+    return out;
+  }
   function listeCourses(jours) {
     const acc = {};
     if (!state.semaine) return acc;
@@ -605,19 +835,18 @@
         if (!e.jours.includes(jour)) e.jours.push(jour);
       });
     };
-    state.semaine.plan.forEach((p) => {
-      if (jours && !jours.includes(p.jour)) return;
+    platsDesJours(jours).forEach(({ cle, p }) => {
       const r = getR(p.nom);
       if (!r) return;
       const a = sidePris(p, r) ? accDe(p.side) : null;
       // accompagnement pris : il remplace les féculents de la recette
-      ajoute(p.jour, r.nom, r.ingredients, r.parts_origine, a ? (ing) => estFeculent(ing.nom) : null);
-      if (a) ajoute(p.jour, a.nom, a.ingredients, a.parts_origine);
+      ajoute(cle, r.nom, r.ingredients, r.parts_origine, a ? (ing) => estFeculent(ing.nom) : null);
+      if (a) ajoute(cle, a.nom, a.ingredients, a.parts_origine);
     });
     Object.values(vus).forEach((e) => {
       const nom = Object.keys(e.noms).sort((x, y) => y.length - x.length || x.localeCompare(y))[0];
       const rayon = Object.keys(e.rayons).sort((x, y) => e.rayons[y] - e.rayons[x] || rangRayon(x) - rangRayon(y))[0];
-      e.jours.sort((x, y) => JOURS.indexOf(x) - JOURS.indexOf(y));
+      e.jours.sort((x, y) => ordreJour(x) - ordreJour(y));
       (acc[rayon] = acc[rayon] || {})[norm(nom)] = { nom, cle: e.cle, unites: e.unites, plats: e.plats, jours: e.jours };
     });
     return acc;
@@ -778,18 +1007,24 @@
       <div class="det-body">${corpsRecette(r, remplacePar)}${fin || ""}</div>
     </details>`;
 
+  // les épingles ne valent que pour la semaine courante : jamais montrées sur S+1 (v36)
+  const epingleDuJour = (jour, s) => (!s ? null : nomEpingle(jour, s !== state.semaine));
   // titre du plat d'un jour, ou ce qui le remplace quand le jour est vide
-  function nomDuJour(cadre, p, r) {
+  function nomDuJour(cadre, p, r, s) {
     if (r) return `${p.epingle ? "📌 " : ""}${esc(r.nom)}`;
-    const attendu = nomEpingle(cadre.jour);
+    const attendu = epingleDuJour(cadre.jour, s);
     return attendu ? `📌 ${esc(attendu)}` : "Aucun plat ne correspond";
   }
   // durée, accompagnement, p'tit plus, lien et boutons du plat d'un jour
   function corpsJour(p, r, cadre, s) {
-    const fait = estFait(s, p.jour);
-    const attendu = nomEpingle(cadre.jour);
+    const s1 = s !== state.semaine;               // semaine prochaine : rien n'est encore cuisiné
+    const fait = !s1 && estFait(s, p.jour);
+    const attendu = epingleDuJour(cadre.jour, s);
     let alerte = "";
-    if (!p.epingle && attendu) {
+    if (p.envie && !p.epingle) {
+      alerte = `<div class="epingle-info">Ton envie : <strong>${esc(p.envie)}</strong>${p.horsCadre
+        ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}) : aucun plat de ce style n'en contient.` : ""}</div>`;
+    } else if (!p.epingle && attendu) {
       alerte = `<div class="epingle-info">📌 Tu as demandé <strong>${esc(attendu)}</strong> pour ce jour.
           En attendant qu'il soit ajouté à ta base, voici une proposition.
           <br><button class="linkbtn" data-act="desepingler" data-jour="${esc(p.jour)}">Annuler la demande</button></div>`;
@@ -818,15 +1053,15 @@
         ${p.epingle
           ? `<button data-act="desepingler" data-jour="${esc(p.jour)}">Ne plus imposer</button>`
           : `<button data-act="regen-day" data-jour="${esc(p.jour)}">↻ Changer</button>`}
-        <button class="fait ${fait ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${icoCoche}${fait ? "Fait" : "Marquer fait"}</button>
+        ${s1 ? "" : `<button class="fait ${fait ? "done" : ""}" data-act="fait" data-jour="${esc(p.jour)}" data-nom="${esc(r.nom)}">${icoCoche}${fait ? "Fait" : "Marquer fait"}</button>`}
         ${btnFavori(r.nom)}
       </div>
-      ${blocRecette(r, "ing-" + p.jour, `<p class="style-jour">Style du jour : ${esc(cadre.note)}</p>
+      ${blocRecette(r, (s1 ? "ing-s1-" : "ing-") + p.jour, `<p class="style-jour">Style du jour : ${esc(cadre.note)}</p>
         <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`, pris ? side.nom : null)}`;
   }
   // jour sans plat : demande en attente, ou aucun plat possible
-  function corpsJourVide(cadre) {
-    if (nomEpingle(cadre.jour)) {
+  function corpsJourVide(cadre, s) {
+    if (epingleDuJour(cadre.jour, s)) {
       return `<div class="epingle-info">Tu as demandé ce plat pour ce jour. Il apparaîtra ici dès qu'il sera ajouté à ta base.</div>
         <div class="actions"><button data-act="desepingler" data-jour="${esc(cadre.jour)}">Annuler la demande</button></div>`;
     }
@@ -837,15 +1072,15 @@
     return { p, r: p && getR(p.nom) };
   }
   // « Volaille », « en attente » ou le style du jour quand il n'y a pas de plat
-  const quoiDuJour = (cadre, r) => r ? r.cat : (nomEpingle(cadre.jour) ? "en attente" : cadre.note);
+  const quoiDuJour = (cadre, r, s) => r ? r.cat : (epingleDuJour(cadre.jour, s) ? "en attente" : cadre.note);
 
   function blocCeSoir(i, sem, s, cadres) {
     const cadre = cadres[i];
     const { p, r } = platDuJour(s, cadre);
     return `<section class="ce-soir${r ? "" : " vide"}">
-        <div class="kk">Ce soir · ${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r))}</div>
-        <div class="nm">${nomDuJour(cadre, p, r)}</div>
-        ${r ? corpsJour(p, r, cadre, s) : corpsJourVide(cadre)}
+        <div class="kk">Ce soir · ${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r, s))}</div>
+        <div class="nm">${nomDuJour(cadre, p, r, s)}</div>
+        ${r ? corpsJour(p, r, cadre, s) : corpsJourVide(cadre, s)}
       </section>`;
   }
   // un autre jour : une ligne de menu, qui se déplie sur la même fiche que « ce soir »
@@ -854,11 +1089,37 @@
     const { p, r } = platDuJour(s, cadre);
     const l2 = r ? [sidePris(p, r) ? `avec ${esc(p.side.nom)}` : "", fmtDuree(dureeTotale(r))].filter(Boolean).join(" — ")
       + (prixHtml(r) ? " · " + prixHtml(r) : "") : "";
-    return `<details class="jour-ligne${r ? "" : " vide"}" data-cle="jour-${esc(cadre.jour)}">
-        <summary><div class="dy">${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r))}</div>
-          <div class="n">${nomDuJour(cadre, p, r)}</div>${l2 ? `<div class="l2">${l2}</div>` : ""}</summary>
-        <div class="fiche-int">${r ? corpsJour(p, r, cadre, s) : corpsJourVide(cadre)}</div>
+    // S+1 a ses propres clés de dépliage : sinon ouvrir lundi S+1 rouvrait lundi de cette semaine
+    const cle = (s === state.semaine ? "jour-" : "s1-jour-") + cadre.jour;
+    return `<details class="jour-ligne${r ? "" : " vide"}" data-cle="${esc(cle)}">
+        <summary><div class="dy">${JOURS_LONG[i]} ${quantieme(sem, i)} · ${esc(quoiDuJour(cadre, r, s))}</div>
+          <div class="n">${nomDuJour(cadre, p, r, s)}</div>${l2 ? `<div class="l2">${l2}</div>` : ""}</summary>
+        <div class="fiche-int">${r ? corpsJour(p, r, cadre, s) : corpsJourVide(cadre, s)}</div>
       </details>`;
+  }
+
+  /* Onglet Semaine (v36) : « Cette semaine » ou « Semaine prochaine ». Réglage d'affichage de
+     l'écran seulement (pas enregistré) : l'app s'ouvre toujours sur la semaine en cours. */
+  let vueSuivante = false;
+  const semaineVue = () => (vueSuivante ? semaineSuivante() : state.semaine);
+  const choixSemaine = () => `<div class="sem-choix" role="group" aria-label="Semaine affichée">
+      <button data-act="vue-semaine" data-val="0" aria-pressed="${!vueSuivante}">Cette semaine</button>
+      <button data-act="vue-semaine" data-val="1" aria-pressed="${vueSuivante}">Semaine prochaine</button>
+    </div>`;
+
+  function renderSuivante(el) {
+    const s = semaineSuivante() || genererSuivante();
+    const sem = semaineDuRang(rangDe(s));
+    const cadres = getCadre();
+    const html = enTete("Semaine prochaine",
+      `<strong>Semaine ${sem.num}</strong> · ${esc(plageSemaine(sem.an, sem.num))} · ${PARTS_CIBLE} parts/plat`, "week-head")
+      + choixSemaine()
+      + bilanSemaine(s)
+      + `<p class="hint">Préparé d'avance : ce menu deviendra celui de la semaine lundi. Pour acheter
+          d'avance, choisis les jours « S+1 » dans Courses.</p>`
+      + `<div class="menu">${cadres.map((c, i) => ligneJour(i, sem, s, cadres)).join("")}</div>`
+      + `<div class="pied"><button id="btn-gen" class="pill">↻ Générer un nouveau menu</button></div>`;
+    redessiner(el, html);
   }
 
   function renderSemaine() {
@@ -866,7 +1127,11 @@
     // Une nouvelle semaine = un nouveau menu. Sans ce contrôle l'app restait affichée sur
     // la semaine précédente indéfiniment (et les épingles périmées n'étaient jamais purgées,
     // puisque c'est generer() qui s'en charge).
-    if (!state.semaine || !state.semaine.plan.length || rangDe(state.semaine) !== rangCourant()) generer();
+    if (!state.semaine || !state.semaine.plan.length || rangDe(state.semaine) !== rangCourant()) {
+      generer();
+      vueSuivante = false;                     // nouvelle semaine : on montre celle qui commence
+    }
+    if (vueSuivante) return renderSuivante(el);
     const s = state.semaine;
     const sem = semaineDuRang(rangDe(s));
     // on parcourt le CADRE (et non le plan) pour rendre visible un jour sans plat possible
@@ -876,6 +1141,7 @@
     const auj = indexAujourdhui();
     let html = enTete("Menu de la semaine",
       `<strong>Semaine ${sem.num}</strong> · ${esc(plageSemaine(sem.an, sem.num))} · ${PARTS_CIBLE} parts/plat`, "week-head");
+    html += choixSemaine();
     html += bilanSemaine(s);
     html += blocCeSoir(auj, sem, s, cadres);
     if (auj < 6) {
@@ -895,40 +1161,68 @@
      pour mercredi ne doit pas paraître acheté pour jeudi. Une ligne est cochée quand toutes
      ses cases visibles le sont ; la cocher les coche toutes. L'écran ET la liste copiée
      calculent ces identifiants de la même façon. */
-  const idArticle = (cle, jour) => norm("art|" + cle + "|" + jour);
+  /* v36 : chaque case porte le RANG de sa semaine. Avant, « ail · Lun » coché un lundi restait
+     coché tous les lundis suivants (rien ne remettait la liste à zéro). Avec le rang, une case
+     cochée pour lundi S+1 reste cochée quand S+1 devient la semaine courante. */
+  const rangDuJour = (k) => rangDe(state.semaine) + (estJourS1(k) ? 1 : 0);
+  const idArticle = (cle, k) => norm("art|" + cle + "|" + rangDuJour(k) + "|" + jourDe(k));
   const idsArticle = (it) => it.jours.map((j) => idArticle(it.cle, j));
-  const idPlus = (plat) => norm("plus|" + plat);
+  const idPlus = (plat, rang) => norm("plus|" + rang + "|" + plat);
   const estCoche = (id) => !!state.coursesCochees[id];
   const toutCoche = (ids) => ids.length > 0 && ids.every(estCoche);
+  /** Oublie les cases des semaines passées, et celles d'avant la v36 (sans semaine). Locale :
+      si l'autre téléphone les renvoie, elles n'apparaissent nulle part et repartent ici. */
+  function purgerCourses(rang) {
+    const cc = state.coursesCochees || {};
+    let change = false;
+    Object.keys(cc).forEach((id) => {
+      const m = id.split("|");
+      const r = m[0] === "art" && m.length === 4 ? +m[2] : (m[0] === "plus" && m.length === 3 ? +m[1] : NaN);
+      if (!(r >= rang)) { delete cc[id]; change = true; }
+    });
+    if (change) localStorage.setItem(STORE, JSON.stringify(state));
+  }
 
   /* Filtre des courses par jour (v33) : pour ne pas tout acheter d'un coup. Réglage de CET
      appareil (chacun fait ses courses), oublié au changement de semaine. null = toute la semaine. */
   const FILTRE_CLE = "mims_courses_jours";
+  const JOURS_S1 = JOURS.map((j) => j + "+1");
+  // une sélection qui couvre exactement cette semaine = pas de filtre
+  const estToutCetteSemaine = (sel) => sel.length === JOURS.length && JOURS.every((j) => sel.includes(j));
   function joursFiltres() {
     try {
       const f = JSON.parse(localStorage.getItem(FILTRE_CLE));
       if (f && state.semaine && f.rang === rangDe(state.semaine) && Array.isArray(f.jours)) {
-        const j = JOURS.filter((x) => f.jours.includes(x));
-        if (j.length && j.length < JOURS.length) return j;
+        const permis = semaineSuivante() ? JOURS.concat(JOURS_S1) : JOURS;
+        const j = permis.filter((x) => f.jours.includes(x));
+        if (j.length && !estToutCetteSemaine(j)) return j;
       }
     } catch (e) { /* stockage illisible : toute la semaine */ }
     return null;
   }
   // « Tout » remet la semaine ; depuis « Tout », un jour touché devient le seul choisi ;
-  // ensuite chaque jour s'ajoute ou se retire
+  // ensuite chaque jour s'ajoute ou se retire. « S+1 » ajoute ou retire toute la semaine
+  // prochaine en gardant le reste (depuis « Tout » : les deux semaines entières).
   function filtrerJour(j) {
     const avant = joursFiltres();
-    let sel = j === "tous" ? null : !avant ? [j] : avant.includes(j) ? avant.filter((x) => x !== j) : avant.concat(j);
-    if (sel && (!sel.length || sel.length === JOURS.length)) sel = null;
+    let sel;
+    if (j === "tous") sel = null;
+    else if (j === "s1") {
+      const base = avant || JOURS.slice();
+      const toutS1 = JOURS_S1.every((k) => base.includes(k));
+      sel = toutS1 ? base.filter((k) => !estJourS1(k)) : base.concat(JOURS_S1.filter((k) => !base.includes(k)));
+    } else sel = !avant ? [j] : avant.includes(j) ? avant.filter((x) => x !== j) : avant.concat(j);
+    if (sel && (!sel.length || estToutCetteSemaine(sel))) sel = null;
+    if (sel) sel.sort((a, b) => ordreJour(a) - ordreJour(b));
     try {
       if (sel) localStorage.setItem(FILTRE_CLE, JSON.stringify({ rang: rangDe(state.semaine), jours: sel }));
       else localStorage.removeItem(FILTRE_CLE);
     } catch (e) { /* stockage indisponible : le filtre ne survit pas au rechargement */ }
   }
   // « p'tits plus » des plats des jours choisis
-  const plusDesJours = (jours) => (state.semaine ? state.semaine.plan : [])
-    .filter((p) => !jours || jours.includes(p.jour))
-    .map((p) => getR(p.nom)).filter((r) => r && r.bonus).map((r) => ({ plat: r.nom, quoi: r.bonus }));
+  const plusDesJours = (jours) => platsDesJours(jours)
+    .map(({ cle, p }) => ({ r: getR(p.nom), rang: rangDuJour(cle) })).filter((x) => x.r && x.r.bonus)
+    .map((x) => ({ plat: x.r.nom, quoi: x.r.bonus, rang: x.rang }));
 
   function renderCourses() {
     const el = document.getElementById("view-courses");
@@ -939,10 +1233,20 @@
     const filtre = joursFiltres();
     const acc = listeCourses(filtre);
     const rayons = ORDRE_RAYONS.filter((r) => acc[r]).concat(Object.keys(acc).filter((r) => !ORDRE_RAYONS.includes(r)));
+    const choisi = (k) => !!filtre && filtre.includes(k);
+    const s1 = semaineSuivante();
+    // 2e rangée (v36) : les jours de la semaine prochaine, si elle est préparée
+    const rangeeS1 = s1
+      ? `<div class="jours-filtre s1" role="group" aria-label="Jours de la semaine prochaine à acheter">
+          <button data-act="filtre-jour" data-jour="s1" aria-pressed="${JOURS_S1.every(choisi)}" title="Toute la semaine prochaine (semaine ${s1.num})">S+1</button>${JOURS.map((j) =>
+            `<button data-act="filtre-jour" data-jour="${j}+1" aria-pressed="${choisi(j + "+1")}" aria-label="${j} de la semaine prochaine">${j}</button>`).join("")}
+        </div>`
+      : `<p class="hint s1-vide">Pour acheter aussi pour la semaine prochaine :
+          <button class="lien" data-act="preparer-suivante">préparer son menu ›</button></p>`;
     const puces = `<div class="jours-filtre" role="group" aria-label="Jours à acheter">
         <button data-act="filtre-jour" data-jour="tous" aria-pressed="${!filtre}">Tout</button>${JOURS.map((j) =>
-          `<button data-act="filtre-jour" data-jour="${j}" aria-pressed="${!!filtre && filtre.includes(j)}">${j}</button>`).join("")}
-      </div>`;
+          `<button data-act="filtre-jour" data-jour="${j}" aria-pressed="${choisi(j)}">${j}</button>`).join("")}
+      </div>${rangeeS1}`;
     let n = 0, html = "";
     rayons.forEach((rayon) => {
       const items = Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom));
@@ -954,7 +1258,7 @@
         html += `<label class="shop-row ${ok ? "checked" : ""}">
           <input type="checkbox" data-act="course" data-ids="${esc(JSON.stringify(ids))}" ${ok ? "checked" : ""} />
           <span class="sn">${esc(it.nom)}</span>
-          <span class="sp">${esc(it.jours.join(", ") + " — " + it.plats.join(" · "))}</span>
+          <span class="sp">${esc(it.jours.map(libJour).join(", ") + " — " + it.plats.join(" · "))}</span>
         </label>`;
       });
       html += `</div>`;
@@ -965,7 +1269,7 @@
       html += `<h3 class="cat-title orn"><i></i>Pour sublimer (optionnel)<i></i></h3>
         <p class="hint">Pas indispensable — juste le petit truc en plus.</p><div class="shop-list">`;
       plus.forEach((it) => {
-        const id = idPlus(it.plat);
+        const id = idPlus(it.plat, it.rang);
         const ok = estCoche(id);
         html += `<label class="shop-row optionnel ${ok ? "checked" : ""}">
           <input type="checkbox" data-act="course" data-ids="${esc(JSON.stringify([id]))}" ${ok ? "checked" : ""} />
@@ -975,11 +1279,11 @@
       });
       html += `</div>`;
     }
-    if (!n) html = `<p class="empty">Rien à acheter pour ${esc(filtre ? filtre.join(", ") : "cette semaine")}.</p>` + html;
+    if (!n) html = `<p class="empty">Rien à acheter pour ${esc(filtre ? filtre.map(libJour).join(", ") : "cette semaine")}.</p>` + html;
     const sem = semaineDuRang(rangDe(state.semaine));
     // « Copier » et « Tout décocher » restent collés en bas de l'écran : avant, il fallait
     // descendre au bout des ~70 articles pour les atteindre
-    el.innerHTML = enTete("Liste de courses", `<strong>${n} articles</strong> · ${filtre ? esc(filtre.join(", ")) : `semaine ${sem.num}`}`, "week-head")
+    el.innerHTML = enTete("Liste de courses", `<strong>${n} articles</strong> · ${filtre ? esc(filtre.map(libJour).join(", ")) : `semaine ${sem.num}`}`, "week-head")
       + puces
       + `<p class="hint">Choisis les jours à acheter, puis coche ce que tu as déjà. Les quantités sont dans chaque recette (onglet Semaine).</p>`
       + html
@@ -993,7 +1297,7 @@
   function texteCourses() {
     const filtre = joursFiltres();
     const acc = listeCourses(filtre);
-    let out = `🛒 Liste de courses${filtre ? " — " + filtre.join(", ") : ""}\n`, n = 0;
+    let out = `🛒 Liste de courses${filtre ? " — " + filtre.map(libJour).join(", ") : ""}\n`, n = 0;
     ORDRE_RAYONS.filter((r) => acc[r]).forEach((rayon) => {
       const reste = Object.values(acc[rayon]).filter((it) => !toutCoche(idsArticle(it)))
         .sort((a, b) => a.nom.localeCompare(b.nom));
@@ -1001,7 +1305,7 @@
       out += `\n— ${rayon} —\n`;
       reste.forEach((it) => { out += `• ${it.nom}\n`; n++; });
     });
-    const plus = plusDesJours(filtre).filter((it) => !estCoche(idPlus(it.plat)));
+    const plus = plusDesJours(filtre).filter((it) => !estCoche(idPlus(it.plat, it.rang)));
     if (plus.length) {
       out += `\n— Pour sublimer (optionnel) —\n`;
       plus.forEach((it) => { out += `• ${it.quoi} (${it.plat})\n`; n++; });
@@ -1152,12 +1456,30 @@
     });
     return h + `</div>`;
   }
+  /* Propositions sous le champ des envies (v36) : les plats de la base dont le TITRE ou un
+     INGRÉDIENT correspond au texte tapé. Un toucher met le plat dans le champ. */
+  function propositionsEnvie(texte) {
+    const t = (texte || "").trim();
+    if (cleIngr(t).length < 3) return "";
+    const d = norm(t);
+    const parTitre = RECIPES.filter((r) => norm(r.nom).includes(d));
+    const parIngr = recettesAvec(t).filter((r) => !parTitre.includes(r));
+    const tous = parTitre.concat(parIngr).filter((r) => !estExclu(r));
+    if (!tous.length) return `<p class="hint">Rien dans ta base pour « ${esc(t)} » : l'envie sera notée pour l'ajouter.</p>`;
+    const titre = parIngr.length
+      ? `${tous.length} plat${tous.length > 1 ? "s" : ""} avec « ${esc(t)} » dans ta base :`
+      : `Dans ta base :`;
+    return `<p class="hint">${titre}</p><div class="chips props">${tous.slice(0, 8).map((r) =>
+      `<button class="chip prop" data-act="envie-prop" data-nom="${esc(r.nom)}">${esc(r.nom)} <em>${esc(r.cat)}</em></button>`).join("")}</div>`;
+  }
   function sectionEnvies() {
-    let h = `<p class="hint">Propose un plat que tu aimerais voir ajouté. Tu peux coller le lien d'une recette,
-        et choisir un jour pour qu'elle y soit imposée dès qu'elle est dans ta base.</p>
+    let h = `<p class="hint">Un plat que tu aimerais voir ajouté, ou un <strong>ingrédient</strong> dont tu as
+        envie (ex. : poireaux) : l'app met au menu un plat qui en contient, le jour choisi. Pour un plat,
+        tu peux coller le lien de la recette. Un jour déjà passé vise la semaine prochaine.</p>
       <div class="add-row">
-        <input id="new-envie" placeholder="Ex. : enchiladas au poulet" />
+        <input id="new-envie" placeholder="Un plat ou un ingrédient" autocomplete="off" />
       </div>
+      <div id="envie-props"></div>
       <div class="add-row">
         <input id="new-envie-url" placeholder="Lien de la recette (facultatif)" />
       </div>
@@ -1170,6 +1492,12 @@
       </div>
       <div class="chips">`;
     state.envies.forEach((e, i) => {
+      if (estEnvieIngr(e)) {
+        // envie d'ingrédient : son jour, et la semaine qu'elle vise
+        const quand = [e.jour, rangDe(e) === rangCourant() ? "cette semaine" : "semaine prochaine"].filter(Boolean).join(" · ");
+        h += `<span class="chip envie">${esc(e.nom)} <em>(ingrédient · ${esc(quand)})</em><button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
+        return;
+      }
       // une envie est soit un simple texte (ancien format), soit { nom, url, jour }
       const nom = e && e.nom ? e.nom : e;
       const jour = e && e.jour ? e.jour : null;
@@ -1178,7 +1506,8 @@
       // « en attente » alors que « Tendron de veau printanier » est bien dans la base.
       const trouvee = trouverRecette(nom);
       const attente = jour && !trouvee ? ` · en attente d'ajout` : "";
-      h += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${esc(attente)})</em>` : ""}${url ? " · lien" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
+      const s1 = !!(e && typeof e === "object" && rangDe(e) === rangCourant() + 1);
+      h += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${s1 ? " · semaine prochaine" : ""}${esc(attente)})</em>` : ""}${url ? " · lien" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
     });
     return h + `</div>`;
   }
@@ -1298,10 +1627,15 @@
   }
 
   // ---------- events ----------
+  function majPropositionsEnvie() {
+    const inp = document.getElementById("new-envie"), box = document.getElementById("envie-props");
+    if (inp && box) box.innerHTML = propositionsEnvie(inp.value);
+  }
+  document.addEventListener("input", (e) => { if (e.target.id === "new-envie") majPropositionsEnvie(); });
   document.addEventListener("click", (e) => {
     const t = e.target;
     if (t.classList.contains("tab")) return show(t.dataset.view);
-    if (t.id === "btn-gen") { generer(); return renderSemaine(); }
+    if (t.id === "btn-gen") { if (vueSuivante) genererSuivante(); else generer(); return renderSemaine(); }
     if (t.id === "btn-add-ex") {
       const inp = document.getElementById("new-ex");
       if (ajouterExclusion(inp.value)) { inp.value = ""; renderReglages(); toast("Ingrédient exclu"); }
@@ -1340,7 +1674,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save("coursesCochees"); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {}, servis: [] };
+        state = { semaine: null, suivante: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {}, servis: [] };
         save("semaine"); show("semaine");
       }
       return;
@@ -1353,25 +1687,44 @@
     }
     if (act === "reglages-ouvrir") { sectionReglages = t.dataset.sec; renderReglages(); window.scrollTo(0, 0); return; }
     if (act === "reglages-retour") { sectionReglages = null; renderReglages(); window.scrollTo(0, 0); return; }
+    if (act === "envie-prop") {
+      const inp = document.getElementById("new-envie");
+      if (inp) { inp.value = t.dataset.nom; majPropositionsEnvie(); }
+      return;
+    }
+    if (act === "vue-semaine") { vueSuivante = t.dataset.val === "1"; renderSemaine(); window.scrollTo(0, 0); return; }
+    if (act === "preparer-suivante") { vueSuivante = true; return show("semaine"); }
     if (act === "epingler") {
       epingler(t.dataset.jour, t.dataset.nom);
       generer();                                  // le reste de la semaine se réorganise autour
+      vueSuivante = false;                        // une épingle vaut pour cette semaine : on la montre
       renderSemaine();
       return toast(`📌 ${t.dataset.nom} imposé ${t.dataset.jour.toLowerCase()}`);
     }
     if (act === "desepingler") {
+      // sur la semaine prochaine (v37) : seul ce jour est retiré, le reste de S+1 ne bouge pas
+      if (vueSuivante && semaineSuivante()) {
+        desepingler(t.dataset.jour, true);
+        libererSuivante(t.dataset.jour);
+        renderSemaine();
+        return toast("Plat libéré — le jour redevient automatique");
+      }
       desepingler(t.dataset.jour);
       generer();
       renderSemaine();
       return toast("Plat libéré — le jour redevient automatique");
     }
+    // les boutons d'un jour agissent sur la semaine AFFICHÉE : cette semaine ou S+1 (v36)
     if (act === "regen-day") {
-      if (regenJour(t.dataset.jour) === "epingle") return toast("Ce plat est imposé — retire d'abord l'épingle");
+      const s = semaineVue();
+      if (!s) return;
+      if (regenJour(t.dataset.jour, s) === "epingle") return toast("Ce plat est imposé — retire d'abord l'épingle");
       return renderSemaine();
     }
     if (act === "regen-side") {
       // repioche un accompagnement COMPATIBLE avec la catégorie du plat, et différent de l'actuel
-      const p = state.semaine.plan.find((x) => x.jour === t.dataset.jour);
+      const s = semaineVue();
+      const p = s && s.plan.find((x) => x.jour === t.dataset.jour);
       const r = p && getR(p.nom);
       if (r) {
         const compat = ACC().filter((a) => (a.suits || []).includes(r.cat));
@@ -1380,16 +1733,17 @@
           const a = pool[Math.floor(Math.random() * pool.length)];
           // un accompagnement déjà pris reste pris : on change seulement lequel
           p.side = { nom: a.nom, url: a.url, source: a.source };
-          save("semaine"); renderSemaine();
+          save(champDe(s)); renderSemaine();
         } else toast("Pas d'autre accompagnement adapté");
       }
       return;
     }
     if (act === "choisir-side") {
-      const p = state.semaine.plan.find((x) => x.jour === t.dataset.jour);
+      const s = semaineVue();
+      const p = s && s.plan.find((x) => x.jour === t.dataset.jour);
       if (p && p.side) {
         p.sideChoisi = !p.sideChoisi;
-        save("semaine"); renderSemaine();
+        save(champDe(s)); renderSemaine();
         toast(p.sideChoisi ? `${p.side.nom} ajouté aux courses` : `${p.side.nom} retiré des courses`);
       }
       return;
@@ -1457,31 +1811,73 @@
       if (url && !/^https?:\/\//i.test(url)) {
         return toast("Le lien doit commencer par https://");
       }
+      // v36 : un INGRÉDIENT de la base devient une envie d'ingrédient. Restent un PLAT (imposé
+      // comme avant) : un titre exact, ou un nom de plusieurs mots qui ne désigne qu'un plat
+      // (« Tendron de veau »). Un seul mot (« lardons ») est un ingrédient même s'il figure dans
+      // un titre : sinon « lardons » imposait le seul plat qui le porte dans son nom.
+      const titres = RECIPES.filter((r) => norm(r.nom).includes(norm(v)));
+      const plusieursMots = norm(v).split(/\s+/).filter((m) => m.length > 2).length >= 2;
+      const unPlat = !!getR(v) || (titres.length === 1 && plusieursMots);
+      if (!unPlat && !url && recettesAvec(v).some((r) => !estExclu(r))) {
+        const auj = indexAujourdhui();
+        // le jour choisi encore à venir cette semaine (ou, sans jour, toujours) : cette semaine ;
+        // sinon la semaine prochaine
+        const cible = !jour || JOURS.indexOf(jour) >= auj ? semaineCourante() : semaineDuRang(rangCourant() + 1);
+        state.envies = state.envies.filter((e) => !(estEnvieIngr(e) && norm(e.nom) === norm(v) && rangDe(e) === rangSemaine(cible.an, cible.num)));
+        state.envies.push({ nom: v, type: "ingredient", jour: jour || null, an: cible.an, num: cible.num });
+        save("envies");
+        const s = rangSemaine(cible.an, cible.num) === rangCourant() ? state.semaine : semaineSuivante();
+        const quand = s === state.semaine ? "cette semaine" : "la semaine prochaine";
+        inp.value = ""; if (inpUrl) inpUrl.value = "";
+        if (!s) { renderReglages(); return toast(`Noté : ${v}${jour ? " " + jour.toLowerCase() : ""} la semaine prochaine, quand tu prépareras son menu`); }
+        const changes = appliquerEnviesIngredient(s);
+        save(champDe(s));
+        renderReglages();
+        const p = s.plan.find((x) => x.envie === v && (!jour || x.jour === jour));
+        if (changes.length && p) return toast(`${v} : ${p.nom}, ${JOURS_LONG[JOURS.indexOf(p.jour)].toLowerCase()} (${quand})`);
+        if (p) return toast(`${p.nom} (${p.jour.toLowerCase()}) contient déjà ${v}`);
+        return toast(`Aucun plat avec ${v} ne convient ${jour ? "ce jour-là" : "aux jours qui restent"} — envie notée`);
+      }
       // Si le plat est DÉJÀ dans la liste, on ne refuse pas : on met à jour son jour et son
       // lien. Refuser en silence donnait un bouton « Ajouter » qui semblait mort quand on
       // revenait préciser un jour sur une envie déjà notée.
+      // v37 : un jour déjà passé cette semaine vise ce jour de la semaine PROCHAINE. Avant, le
+      // plat s'imposait sur le jour passé (jamais servi) et toute la semaine était re-tirée.
+      const s1 = !!jour && JOURS.indexOf(jour) < indexAujourdhui();
+      const semV = semaineEpingle(s1);
       const dejaI = state.envies.findIndex((e) => norm(e && e.nom ? e.nom : e) === norm(v));
       if (dejaI >= 0) {
         const anc = state.envies[dejaI];
         const ancNom = anc && anc.nom ? anc.nom : anc;
         const ancJour = anc && anc.jour;
-        if (ancJour && ancJour !== jour && nomEpingle(ancJour) === ancNom) desepingler(ancJour);
-        state.envies[dejaI] = { nom: ancNom, url: url || (anc && anc.url) || null, jour: jour || null };
+        const ancS1 = !!(anc && typeof anc === "object" && rangDe(anc) === rangCourant() + 1);
+        if (ancJour && (ancJour !== jour || ancS1 !== s1) && nomEpingle(ancJour, ancS1) === ancNom) {
+          desepingler(ancJour, ancS1);
+          if (ancS1) libererSuivante(ancJour);
+        }
+        state.envies[dejaI] = { nom: ancNom, url: url || (anc && anc.url) || null, jour: jour || null, ...(jour ? { an: semV.an, num: semV.num } : {}) };
       } else {
-        state.envies.push({ nom: v, url: url || null, jour: jour || null });
+        state.envies.push({ nom: v, url: url || null, jour: jour || null, ...(jour ? { an: semV.an, num: semV.num } : {}) });
       }
       save("envies");
       // un jour choisi = épingle posée d'avance : elle restera « en attente » tant que la
       // recette n'est pas dans la base, puis s'appliquera toute seule au premier menu suivant.
-      if (jour) { epingler(jour, v); generer(); }
+      if (jour && !s1) { epingler(jour, v); generer(); }
+      if (jour && s1) { epingler(jour, v, true); imposerSuivante(jour); }   // ce jour seulement, cette semaine intacte
       inp.value = ""; if (inpUrl) inpUrl.value = "";
       renderReglages();
-      return toast(jour ? `Noté — ${v} sera imposé ${jour.toLowerCase()} dès que je l'ai ajouté` : "Envie ajoutée — je la scraperai");
+      if (!jour) return toast("Envie ajoutée — je la scraperai");
+      const quand = `${JOURS_LONG[JOURS.indexOf(jour)].toLowerCase()}${s1 ? " de la semaine prochaine" : ""}`;
+      return toast(trouverRecette(v) ? `${v} imposé ${quand}` : `Noté — ${v} sera imposé ${quand} dès que je l'ai ajouté`);
     }
     if (act === "del-envie") {
       const e = state.envies[+t.dataset.i];
       const j = e && e.jour;
-      if (j && nomEpingle(j) === (e.nom || e)) desepingler(j);   // on retire aussi l'épingle en attente
+      const s1 = !!(e && typeof e === "object" && rangDe(e) === rangCourant() + 1);
+      if (j && nomEpingle(j, s1) === (e.nom || e)) {        // on retire aussi l'épingle en attente
+        desepingler(j, s1);
+        if (s1) libererSuivante(j);
+      }
       state.envies.splice(+t.dataset.i, 1); save("envies"); return renderReglages();
     }
     if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save("promos"); return renderReglages(); }
