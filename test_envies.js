@@ -109,6 +109,68 @@
     if (!st.epingles.Dim || st.epingles.Dim.nom !== "Cordon bleu") ech("6. « Cordon bleu » pour dimanche n'est plus imposé comme avant");
     if (st.envies.some((x) => x && x.type === "ingredient" && x.nom === "Cordon bleu")) ech("6. un nom de plat a été pris pour un ingrédient");
 
+    /* 8. Une envie de PLAT pour un jour déjà passé (v37) vise ce jour de la semaine PROCHAINE :
+          avant, elle re-tirait toute la semaine en cours et le plat n'était jamais servi. */
+    const vueS = (v) => { onglet("semaine"); document.querySelector(`#view-semaine button[data-act="vue-semaine"][data-val="${v}"]`).click(); };
+    const noms = (s) => (s ? s.plan.map((p) => p.nom) : []);
+    // 8a. vendredi, S+1 pas encore préparée : « Chou farci pour mardi »
+    vueS("0");
+    st.suivante = null;
+    const cour8 = noms(st.semaine).join("|");
+    ajouter("Chou farci", "Mar");
+    const ep = st.epingles["Mar+1"];
+    if (!ep || ep.nom !== "Chou farci" || ep.num !== 42) ech(`8a. pas d'épingle pour mardi S+1 : ${JSON.stringify(st.epingles)}`);
+    if (st.epingles.Mar && st.epingles.Mar.nom === "Chou farci") ech("8a. le plat a été imposé sur le mardi déjà passé");
+    if (noms(st.semaine).join("|") !== cour8) ech("8a. le menu de cette semaine a changé");
+    const env = st.envies.find((x) => x && x.nom === "Chou farci");
+    if (!env || env.num !== 42) ech(`8a. envie enregistrée sans la semaine 42 : ${JSON.stringify(env)}`);
+    ouvrirEnvies();
+    const chip = [...document.querySelectorAll("#view-reglages .chip.envie")].find((c) => c.textContent.includes("Chou farci"));
+    if (!chip || !/semaine prochaine/.test(chip.textContent)) ech("8a. l'envie n'indique pas « semaine prochaine »");
+    // 8b. ouvrir la semaine prochaine : mardi = Chou farci, imposé (pas de « Changer »)
+    vueS("1");
+    const marS1 = st.suivante && st.suivante.plan.find((p) => p.jour === "Mar");
+    res.details.mardiS1 = marS1 && marS1.nom;
+    if (!marS1 || marS1.nom !== "Chou farci" || !marS1.epingle) ech(`8b. mardi S+1 : ${JSON.stringify(marS1)}`);
+    const ficheMar = document.querySelector('#view-semaine details[data-cle="s1-jour-Mar"]');
+    if (!ficheMar || ficheMar.querySelector('button[data-act="regen-day"]') || !ficheMar.querySelector('button[data-act="desepingler"]'))
+      ech("8b. la fiche de mardi S+1 ne montre pas « Ne plus imposer » à la place de « Changer »");
+    // 8c. S+1 déjà préparée : « Rôti de veau pour lundi » ne change que lundi (et un éventuel doublon)
+    const s1Avant = noms(st.suivante);
+    ajouter("Rôti de veau", "Lun");
+    const s1Apres = noms(st.suivante);
+    if (s1Apres[0] !== "Rôti de veau" || !st.suivante.plan[0].epingle) ech(`8c. lundi S+1 = « ${s1Apres[0]} » au lieu de Rôti de veau imposé`);
+    const autres = s1Apres.map((n, i) => i > 0 && n !== s1Avant[i] && s1Avant[i] !== "Rôti de veau" ? st.suivante.plan[i].jour : null).filter(Boolean);
+    if (autres.length) ech(`8c. d'autres jours de S+1 ont changé : ${autres.join(", ")}`);
+    if (s1Apres.filter((n) => n === "Rôti de veau").length > 1) ech("8c. Rôti de veau deux fois dans S+1");
+    if (noms(st.semaine).join("|") !== cour8) ech("8c. le menu de cette semaine a changé");
+    // 8d. « Ne plus imposer » sur lundi S+1 libère ce jour, sans toucher au reste
+    vueS("1");
+    document.querySelector('#view-semaine details[data-cle="s1-jour-Lun"] button[data-act="desepingler"]').click();
+    if (!st.epingles["Lun+1"] || st.epingles["Lun+1"].nom !== null) ech("8d. l'épingle de lundi S+1 n'est pas levée");
+    if (st.suivante.plan[0].epingle) ech("8d. lundi S+1 est encore marqué imposé");
+    if ((st.suivante.plan.find((p) => p.jour === "Mar") || {}).nom !== "Chou farci") ech("8d. mardi S+1 a perdu son plat imposé");
+    if (noms(st.semaine).join("|") !== cour8) ech("8d. le menu de cette semaine a changé");
+    // 8e. retirer l'envie (✕) retire aussi l'épingle de la semaine prochaine
+    ajouter("Pot-au-feu", "Mer");
+    ouvrirEnvies();
+    const iPot = st.envies.findIndex((x) => x && x.nom === "Pot-au-feu");
+    document.querySelector(`#view-reglages button[data-act="del-envie"][data-i="${iPot}"]`).click();
+    if (!st.epingles["Mer+1"] || st.epingles["Mer+1"].nom !== null) ech("8e. retirer l'envie ne lève pas l'épingle de mercredi S+1");
+    if ((st.suivante.plan.find((p) => p.jour === "Mer") || {}).epingle) ech("8e. mercredi S+1 reste imposé après retrait de l'envie");
+    vueS("0");
+
+    /* 9. Le lundi venu, le plat imposé pour mardi S+1 est au menu de la semaine, toujours imposé. */
+    figer("2026-10-12T12:00:00");                       // lundi, semaine 42
+    onglet("semaine");
+    const mar9 = st.semaine.plan.find((p) => p.jour === "Mar");
+    res.details.mardiSemaine42 = mar9 && mar9.nom;
+    if (!mar9 || mar9.nom !== "Chou farci" || !mar9.epingle) ech(`9. mardi de la semaine 42 : ${JSON.stringify(mar9)}`);
+    if (!st.epingles.Mar || st.epingles.Mar.nom !== "Chou farci" || st.epingles.Mar.num !== 42) ech(`9. épingle de mardi non reprise : ${JSON.stringify(st.epingles.Mar)}`);
+    if (Object.keys(st.epingles).some((k) => /\+1$/.test(k) && st.epingles[k].num !== 43)) ech(`9. épingles « S+1 » périmées encore là : ${Object.keys(st.epingles).join(", ")}`);
+    const fiche9 = document.querySelector('#view-semaine details[data-cle="jour-Mar"]');
+    if (!fiche9 || fiche9.querySelector('button[data-act="regen-day"]')) ech("9. mardi n'est plus protégé comme plat imposé");
+
     /* 7. Une envie d'ingrédient s'efface d'elle-même quand sa semaine est passée. */
     figer("2026-10-19T12:00:00");                       // semaine 43
     onglet("semaine");
