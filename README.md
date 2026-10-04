@@ -21,3 +21,4 @@ Une catégorie par jour, et surtout : **jamais la même protéine deux jours de 
 
 ## Développement
 Aucun build pour l'app — ouvrir `index.html` suffit. Pour régénérer la base de recettes : `python build_data.py <dossier_des_lots> data.js`.
+Pour ajouter une recette : `python ajouter_recette.py <url> --lot lots/lot5_ajouts.json` (lue par [Glaneur](../glaneur), gratuit, sans IA), puis `python prix_kcal.py lots --ecrire` et `build_data.py`. Détail dans `CLAUDE.md`.

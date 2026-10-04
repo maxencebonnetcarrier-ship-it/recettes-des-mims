@@ -1,0 +1,70 @@
+[
+ {
+  "nom": "Escalope de poulet à la cancoillotte",
+  "url": "https://www.marmiton.org/recettes/recette_escalope-de-poulet-a-la-cancoillotte_57743.aspx",
+  "prep_min": 10,
+  "cuisson_min": 10,
+  "total_min": 20,
+  "parts_origine": 4,
+  "etapes": [
+   "Dans une poêle, faire revenir les escalopes.",
+   "Saler et poivrer.",
+   "Lorsque les escalopes sont cuites, les arroser avec le vin blanc, laisser réduire quelques secondes afin d'évaporer un peu l'alcool.",
+   "Ajouter la crème fraîche et remuer afin d'obtenir un mélange homogène (la crème doit être colorée par le jus de viande).",
+   "Laisser bouillir la crème environ 1 à 2 minutes tout en remuant souvent avec une cuillère en bois.",
+   "La crème doit réduire un peu.",
+   "Ajouter la cancoillotte et remuer.",
+   "Laisser cuire 20 secondes en remuant.",
+   "La sauce doit rester onctueuse et une légère pellicule de cancoillotte doit se former lorsqu'on arrête de remuer."
+  ],
+  "source": "Marmiton",
+  "ingredients": [
+   {
+    "nom": "escalopes de poulet",
+    "qte": 4,
+    "unite": "",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "vin blanc",
+    "qte": 4,
+    "unite": "cuillères à soupe",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "crème fraîche épaisse",
+    "qte": 40,
+    "unite": "cl",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "cancoillotte à l'ail",
+    "qte": 2,
+    "unite": "cuillères à soupe",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   }
+  ],
+  "cout": "Bon marché",
+  "photo": "https://assets.afcdn.com/recipe/20170330/35648_w1024h1024c1cx3680cy2456.jpg",
+  "proteine": "volaille",
+  "cuissons": [
+   "poêle"
+  ],
+  "cat": "Volaille",
+  "saison": "Toute l'année",
+  "tags": [],
+  "kcal_part": 390
+ }
+]
