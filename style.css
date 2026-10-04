@@ -230,6 +230,21 @@ button.x:active { background: var(--danger); border-color: var(--danger); color:
   background: none; color: var(--soft); font-size: .74rem; font-weight: 600; cursor: pointer;
 }
 .jours-filtre button[aria-pressed="true"] { background: var(--ac); border-color: var(--ac); color: var(--ac-ink); }
+/* v36 : 2e rangée = jours de la semaine prochaine, en pointillés pour la distinguer */
+.jours-filtre.s1 { padding-top: 0; }
+.jours-filtre.s1 button { border-style: dashed; }
+.jours-filtre.s1 button:first-child { font-weight: 700; }
+.s1-vide { padding-top: 0; }
+.s1-vide .lien { color: var(--ac); font-size: .8rem; }
+/* v36 : « Cette semaine / Semaine prochaine » en tête de l'onglet Semaine */
+.sem-choix { display: flex; justify-content: center; margin: 2px 20px 10px; }
+.sem-choix button {
+  flex: 1 1 0; max-width: 170px; height: 34px; border: 1px solid var(--btn-ac); background: none;
+  color: var(--soft); font-size: .8rem; font-weight: 600; cursor: pointer;
+}
+.sem-choix button:first-child { border-radius: 999px 0 0 999px; }
+.sem-choix button:last-child { border-radius: 0 999px 999px 0; border-left: none; }
+.sem-choix button[aria-pressed="true"] { background: var(--ac); border-color: var(--ac); color: var(--ac-ink); }
 .sn { font-family: var(--serif); font-size: .97rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
 .sp {
   grid-column: 2; min-width: 0; font-family: var(--serif); font-style: italic; font-size: .72rem; color: var(--mut);
@@ -349,6 +364,9 @@ button.x:active { background: var(--danger); border-color: var(--danger); color:
 }
 .chip.promo, .chip.fav-chip { border-color: var(--btn-ac); }
 .chip button { width: 20px; height: 20px; border: none; border-radius: 50%; background: var(--ln); color: inherit; font-size: .65rem; cursor: pointer; }
+/* v36 : propositions de plats sous le champ des envies — la puce entière se touche */
+button.chip.prop { padding: 6px 12px; color: var(--ink); cursor: pointer; text-align: left; }
+button.chip.prop em { font-family: var(--sans); font-style: normal; font-size: .68rem; color: var(--soft); }
 .sec .actions { margin-bottom: 8px; }
 
 /* ---------- barre d'onglets ---------- */

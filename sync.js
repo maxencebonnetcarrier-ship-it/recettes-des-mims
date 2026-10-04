@@ -10,8 +10,9 @@
   const CONF = "mims_sync_conf";
   // champs synchronisés entre les téléphones du foyer. « servis » (menus des semaines passées,
   // v29) doit l'être aussi : le téléphone qui reçoit le nouveau menu par la synchro n'a jamais
-  // vu la semaine se terminer, il ne noterait donc rien lui-même.
-  const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies", "epingles", "saisonOff", "servis"];
+  // vu la semaine se terminer, il ne noterait donc rien lui-même. « suivante » (v36) : le menu
+  // de la semaine prochaine préparé d'avance, pour que les deux téléphones fassent les mêmes courses.
+  const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies", "epingles", "saisonOff", "servis", "suivante"];
 
   let conf = charger();
   let horodatages = {};   // champ -> dernier horodatage local connu
