@@ -1,0 +1,187 @@
+"""Tests du guetteur des envies (sans réseau) : python -m unittest -q test_guetteur
+
+Couvre : quelles envies chercher, recherche par nom dans les plans de site, choix et refus d'une
+recette (mêmes règles que ajouter_recette.py), note des lecteurs, montée de version, lecture du hub
+(faux hub local test_hub.py)."""
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+import urllib.request
+
+ICI = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, ICI)
+# journal et plans de site du test dans un dossier jetable : jamais dans le vrai journal du guetteur
+os.environ["MIMS_GUETTEUR_DONNEES"] = tempfile.mkdtemp(prefix="mims-guetteur-test-")
+import guetteur as G  # noqa: E402
+
+M = "https://www.marmiton.org/recettes/recette_"
+
+
+def octets(chemin):
+    with open(chemin, "rb") as f:
+        return f.read()
+
+
+def recette_glaneur(nom, url, ingredients):
+    """Recette au format de sortie de « glaneur recettes »."""
+    return {"nom": nom, "url": url, "prep_min": 15, "cuisson_min": 40, "total_min": 55, "parts_origine": 4,
+            "etapes": ["Faire revenir la viande.", "Ajouter le reste et laisser mijoter 40 minutes."],
+            "ingredients": [{"nom": n, "qte": 1, "unite": ""} for n in ingredients], "cout": "Bon marché"}
+
+
+class Envies(unittest.TestCase):
+    BASE = [{"nom": "Tendron de veau printanier"}, {"nom": "Émincés de dinde aux poireaux"},
+            {"nom": "Émincés de poulet sauce moutarde"}, {"nom": "Enchiladas au poulet"}]
+
+    def test_trouver_recette_comme_l_app(self):
+        # même règle que trouverRecette d'app.js : titre exact, texte inclus, ou tous les mots
+        self.assertEqual(G.trouver_recette("Tendron de veau", self.BASE)["nom"], "Tendron de veau printanier")
+        self.assertEqual(G.trouver_recette("emincés de", self.BASE)["nom"], "Émincés de dinde aux poireaux")
+        self.assertEqual(G.trouver_recette("poulet enchiladas", self.BASE)["nom"], "Enchiladas au poulet")
+        self.assertIsNone(G.trouver_recette("porc au caramel", self.BASE))
+        self.assertIsNone(G.trouver_recette("ab", self.BASE))
+
+    def test_envies_a_chercher(self):
+        envies = ["Enchiladas au poulet",                                   # ancien format, déjà en base
+                  {"nom": "poireaux", "type": "ingredient", "jour": "Jeu"},  # ingrédient : la base suffit
+                  {"nom": "Tendron de veau", "jour": "Mar"},                # déjà en base (nom partiel)
+                  {"nom": "Porc au caramel", "jour": "Mar"},
+                  {"nom": "Gratin de ravioles", "url": "https://exemple.fr/ravioles"}]
+        todo = G.envies_a_chercher(envies, self.BASE, {}, time.time())
+        self.assertEqual([e["nom"] for e in todo], ["Porc au caramel", "Gratin de ravioles"])
+        self.assertEqual(todo[1]["url"], "https://exemple.fr/ravioles")
+
+    def test_pas_de_nouvel_essai_trop_tot(self):
+        maintenant = time.time()
+        journal = {G.norm("Porc au caramel"): {"dernier": maintenant - 3600, "resultat": "introuvable"}}
+        self.assertEqual(G.envies_a_chercher([{"nom": "Porc au caramel"}], self.BASE, journal, maintenant), [])
+        journal[G.norm("Porc au caramel")]["dernier"] = maintenant - 25 * 3600
+        self.assertEqual(len(G.envies_a_chercher([{"nom": "Porc au caramel"}], self.BASE, journal, maintenant)), 1)
+
+
+class Recherche(unittest.TestCase):
+    def test_mots_de_l_adresse(self):
+        self.assertEqual(G.mots_adresse(M + "porc-au-caramel_23456.aspx"), ["porc", "caramel"])
+        self.assertEqual(G.mots_adresse("https://cuisine.journaldesfemmes.fr/recette/312345-porc-au-caramel"),
+                         ["porc", "caramel"])
+        self.assertEqual(G.mots_adresse("https://www.saveurs-magazine.fr/recettes/porcs-aux-caramels/"),
+                         ["porc", "caramel"])
+
+    def test_candidats_classes_par_proximite(self):
+        plan = [M + "poulet-au-caramel_1.aspx", M + "travers-de-porc-au-caramel_2.aspx",
+                M + "porc-au-caramel-facile_3.aspx", M + "porc-caramel-et-ananas_4.aspx",
+                M + "porc-au-caramel_5.aspx", M + "caramel-beurre-sale_6.aspx"]
+        c = G.candidats("Porc au caramel", {"marmiton": plan})
+        urls = [x["url"] for x in c]
+        self.assertNotIn(M + "poulet-au-caramel_1.aspx", urls)
+        self.assertNotIn(M + "caramel-beurre-sale_6.aspx", urls)
+        # « facile » n'est pas un mot du plat : les deux adresses exactes passent devant
+        self.assertEqual(set(urls[:2]), {M + "porc-au-caramel_5.aspx", M + "porc-au-caramel-facile_3.aspx"})
+        self.assertEqual(c[0]["en_trop"], 0)
+        self.assertEqual(c[-1]["en_trop"], 1)
+
+    def test_note_des_lecteurs(self):
+        page = ('<script type="application/ld+json">{"@graph":[{"@type":"Recipe","name":"X",'
+                '"aggregateRating":{"ratingValue":"4,7","reviewCount":"128"}}]}</script>')
+        self.assertEqual(G.note_de_la_page(page), (4.7, 128))
+        self.assertEqual(G.note_de_la_page("<html></html>"), (None, 0))
+        # beaucoup d'avis à 4,6 passent devant 2 avis à 5
+        self.assertGreater(G.score(4.6, 200), G.score(5.0, 2))
+
+
+class Choix(unittest.TestCase):
+    def setUp(self):
+        self.connus = {}
+
+    def test_premiere_recette_qui_respecte_les_regles(self):
+        lues = [recette_glaneur("Porc au caramel et au miel", M + "porc-au-caramel-et-miel_1.aspx",
+                                ["échine de porc", "miel", "sauce soja"]),
+                recette_glaneur("Porc au caramel : la meilleure recette", M + "porc-au-caramel_2.aspx",
+                                ["échine de porc", "sucre", "sauce soja", "oignon"])]
+        r, refus = G.choisir_parmi("Porc au caramel", lues, self.connus, set(), set())
+        self.assertIsNotNone(r)
+        self.assertEqual(r["nom"], "Porc au caramel")          # titre nettoyé
+        self.assertEqual(r["url"], M + "porc-au-caramel_2.aspx")
+        self.assertTrue(any("sucré-salé" in x or "miel" in x for x in refus))
+
+    def test_titre_qui_ne_retrouve_pas_l_envie(self):
+        lues = [recette_glaneur("Travers laqués", M + "porc-au-caramel_9.aspx", ["travers de porc", "sucre"])]
+        r, refus = G.choisir_parmi("Porc au caramel", lues, self.connus, set(), set())
+        self.assertIsNone(r)
+        self.assertTrue(any("titre" in x for x in refus))
+
+    def test_lien_fourni_prend_le_nom_de_l_envie(self):
+        # lien donné par l'utilisateur avec SON nom : l'épingle du jour doit retrouver la recette
+        lue = recette_glaneur("Porc au caramel", M + "porc-au-caramel_2.aspx", ["échine de porc", "sucre"])
+        ancien = G.lire_pages
+        G.lire_pages = lambda urls: [lue]
+        try:
+            r, resultat, _ = G.chercher({"nom": "Porc au caramel de mamie", "url": M + "porc-au-caramel_2.aspx"},
+                                        self.connus, set(), set(), {})
+        finally:
+            G.lire_pages = ancien
+        self.assertEqual(resultat, "ajoutee")
+        self.assertEqual(r["nom"], "Porc au caramel de mamie")
+        self.assertTrue(r.get("demande"))
+        self.assertEqual(r["url"], M + "porc-au-caramel_2.aspx")
+
+    def test_deja_dans_les_lots(self):
+        lues = [recette_glaneur("Porc au caramel", M + "porc-au-caramel_2.aspx", ["échine de porc", "sucre"])]
+        r, refus = G.choisir_parmi("Porc au caramel", lues, self.connus, {M + "porc-au-caramel_2.aspx"}, set())
+        self.assertIsNone(r)
+
+
+class Version(unittest.TestCase):
+    def test_monte_les_trois_fichiers_sans_toucher_aux_fins_de_ligne(self):
+        d = tempfile.mkdtemp()
+        try:
+            fichiers = {"app.js": b'(function () {\r\n  const VERSION_APP = 37;\r\n})();\r\n',
+                        "index.html": b'<link href="style.css?v=37" />\r\n<script src="app.js?v=37"></script>\r\n',
+                        "sw.js": b'const CACHE = "mims-v37";\r\n'}
+            for n, b in fichiers.items():
+                with open(os.path.join(d, n), "wb") as f:
+                    f.write(b)
+            self.assertEqual(G.monter_version(d), 38)
+            app = octets(os.path.join(d, "app.js"))
+            self.assertIn(b"VERSION_APP = 38;\r\n", app)
+            self.assertEqual(octets(os.path.join(d, "index.html")).count(b"?v=38"), 2)
+            self.assertIn(b'"mims-v38"', octets(os.path.join(d, "sw.js")))
+            for n in fichiers:
+                b = octets(os.path.join(d, n))
+                self.assertEqual(b.count(b"\r\n"), b.count(b"\n"), n)
+        finally:
+            shutil.rmtree(d)
+
+
+class Hub(unittest.TestCase):
+    def test_lit_les_envies_du_faux_hub(self):
+        s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+        hub = subprocess.Popen([sys.executable, os.path.join(ICI, "test_hub.py"), str(port)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            url = f"http://127.0.0.1:{port}/"
+            corps = json.dumps({"token": "test-token", "patch": {"envies": {"v": [{"nom": "Porc au caramel", "jour": "Mar"}],
+                                                                             "t": 1}}}).encode()
+            for _ in range(50):
+                try:
+                    urllib.request.urlopen(urllib.request.Request(url, data=corps, method="POST"), timeout=2).read()
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            envies = G.envies_du_hub(G.lire_hub(url, "test-token"))
+            self.assertEqual(envies, [{"nom": "Porc au caramel", "jour": "Mar"}])
+            with self.assertRaises(Exception):
+                G.lire_hub(url, "mauvais-mot-de-passe")
+        finally:
+            hub.terminate()
+            hub.wait()
+
+
+if __name__ == "__main__":
+    unittest.main()

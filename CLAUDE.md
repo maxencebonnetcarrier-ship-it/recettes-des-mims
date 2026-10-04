@@ -37,6 +37,8 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
   `index.html` la relit avant la feuille de style. Le test remet « Auto » à la fin.
 - `test_suivante.js` — semaine suivante (S+1) : menu préparé d'avance sans les plats de la semaine, actions
   sur S+1 seulement, jours « S+1 » dans Courses, menu repris tel quel le lundi, cases datées par semaine.
+- `test_guetteur.py` — guetteur des envies (sans réseau) : quelles envies chercher, recherche dans les plans de
+  site, choix et refus, note des lecteurs, montée de version, lecture du hub (faux hub `test_hub.py`).
 - `test_envies.js` — envie d'un ingrédient : propositions, plat au menu le jour choisi (ou la semaine
   prochaine si le jour est passé), « Changer » garde l'ingrédient, un vrai nom de plat reste imposé,
   et un plat demandé pour un jour passé est imposé ce jour-là la semaine prochaine.
@@ -87,6 +89,32 @@ La règle des 3 sites reste entière pour les recettes que Claude cherche de sa 
 `test_ajouter_recette.py` (sans réseau) vérifie la complétion, les refus et l'écriture du lot.
 Usage permis : une recette à la fois, à la demande. Les conditions de Marmiton, du Journal des Femmes et de
 Saveurs interdisent d'aspirer leur site entier pour le republier, ce que ferait ce dépôt public.
+
+### Guetteur des envies (`guetteur.py`, 2026-10-04)
+Choix de l'utilisateur : « il lit mes envies du téléphone, cherche la recette par son nom, l'ajoute et met en
+ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes des Mims - guetteur », posée par
+`installer_guetteur.ps1`, retirée par `-Retirer`), lancée par pythonw, sans fenêtre :
+- **lit les envies de PLATS** sur le hub (les envies d'ingrédient sont ignorées : la base les sert) et ne
+  cherche que celles que la base ne retrouve pas déjà (même règle que `trouverRecette` d'`app.js`) ;
+- **cherche le nom dans les plans de site** des 3 sites (les pages de recherche sont interdites aux robots),
+  gardés 7 jours, puis lit au plus 6 pages candidates et prend la mieux notée par les lecteurs qui passe les
+  règles de `ajouter_recette.py` ET dont le titre sera retrouvé par l'épingle du jour. Un lien fourni dans
+  l'envie est pris tel quel (« recette demandée ») ; si son titre ne contient pas le nom écrit, la recette
+  prend ce nom ;
+- **ajoute** à `lots/lot6_envies.json`, relève prix et calories, reconstruit `data.js`, monte la version,
+  lance TOUS les tests, commite puis pousse. Un test rouge = rien de publié, fichiers remis en l'état ;
+- **ne publie jamais** si le dossier a des modifications en cours (un humain ou un autre outil y travaille) ;
+- un plat introuvable ou refusé est retenté 24 h plus tard. Journal, plans et log :
+  `%LOCALAPPDATA%\mims-guetteur` ;
+- **réglages du PC**, jamais dans le dépôt public : `MIMS_HUB_URL` et `MIMS_HUB_TOKEN` (setx). Sans eux, il
+  ne fait rien. Les envies n'arrivent au hub que si « Partage à deux » est activé sur le téléphone.
+`python guetteur.py --plat "porc au caramel" --essai` cherche sans rien écrire. Tests : `test_guetteur.py`.
+
+### Lancer les tests
+- Navigateur : `node lancer_tests.mjs` (tous les `test_*.js`, `--sombre` pour clair PUIS sombre). playwright-core
+  vient de Glaneur (`../glaneur` ou `%LOCALAPPDATA%\Glaneur\app`), le navigateur est Chrome ou Edge du PC.
+- Python : `python test_ajouter_recette.py` (un SCRIPT, pas unittest : il se termine par sys.exit) et
+  `python -m unittest -q test_guetteur`.
 
 ### Prix et calories (v33)
 Relevés sur la page source, jamais estimés. Seul Marmiton publie les deux : niveau de prix (« Bon
