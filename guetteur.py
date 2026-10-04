@@ -144,6 +144,34 @@ def envies_a_chercher(envies, recettes, journal, maintenant):
     return todo
 
 
+def etat_envies(envies, recettes, journal, maintenant):
+    """Pour l'aperçu (raccourci « Guetteur des Mim's ») : chaque envie et ce que le guetteur en fera.
+    Rend [(libellé, statut, à_chercher)]."""
+    out, vus = [], set()
+    for e in envies:
+        if isinstance(e, str):
+            e = {"nom": e}
+        nom = (e.get("nom") or "").strip()
+        if not nom or norm(nom) in vus:
+            continue
+        vus.add(norm(nom))
+        lib = nom + (f" (pour {e['jour']})" if e.get("jour") else "")
+        if e.get("type") == "ingredient":
+            out.append((lib, "ingrédient : l'app choisit elle-même un plat de ta base qui en contient", False))
+            continue
+        r = trouver_recette(nom, recettes)
+        if r:
+            out.append((lib, f"déjà dans ta base : {r['nom']}", False))
+            continue
+        j = journal.get(norm(nom))
+        if j and maintenant - j.get("dernier", 0) < RELANCE.get(j.get("resultat"), 0):
+            prochain = datetime.fromtimestamp(j["dernier"] + RELANCE[j["resultat"]])
+            out.append((lib, f"déjà cherchée ({j['resultat']}), nouvel essai vers le {prochain:%d/%m à %H:%M}", False))
+            continue
+        out.append((lib, "à chercher" + (" (lien fourni)" if e.get("url") else ""), True))
+    return out
+
+
 def reglage(nom):
     """Variable d'environnement, sinon celle enregistrée par setx (registre) : une tâche planifiée ne
     voit pas toujours un réglage posé après l'ouverture de session."""
@@ -558,13 +586,40 @@ def passe(essai=False, plat=None):
     return 0
 
 
+def apercu():
+    """Envies du hub et ce que le guetteur en fera. Code : 0 = au moins un plat à chercher, 3 = rien à
+    chercher, 2 = réglages manquants."""
+    url, token = reglage("MIMS_HUB_URL"), reglage("MIMS_HUB_TOKEN")
+    if not url or not token:
+        print("Réglages manquants : MIMS_HUB_URL et MIMS_HUB_TOKEN.")
+        return 2
+    envies = envies_du_hub(lire_hub(url, token))
+    if not envies:
+        print("Aucune envie sur le partage. Note-les sur le téléphone (Réglages › Mes envies), avec « Partage à deux »"
+              " activé : sinon elles restent sur le téléphone.")
+        return 3
+    lignes = etat_envies(envies, recettes_de_la_base(), charger_journal(), time.time())
+    print(f"{len(lignes)} envie(s) sur le partage :")
+    for lib, statut, _ in lignes:
+        print(f"  • {lib} — {statut}")
+    return 0 if any(x[2] for x in lignes) else 3
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--essai", action="store_true", help="chercher et afficher, sans rien écrire ni publier")
     ap.add_argument("--plat", help="chercher ce plat au lieu de lire les envies du hub")
+    ap.add_argument("--apercu", action="store_true", help="montrer les envies du hub et ce qui en sera fait")
     a = ap.parse_args()
+    if a.apercu:
+        try:
+            return apercu()
+        except Exception as err:
+            print("Lecture du partage impossible : " + str(err)[:300])
+            return 1
     verrou = os.path.join(donnees(), "verrou")
     if os.path.exists(verrou) and time.time() - os.path.getmtime(verrou) < 3600:
+        print("Une recherche est déjà en cours (tâche planifiée) : réessaie dans quelques minutes.")
         return 0  # une passe tourne déjà
     open(verrou, "w").write(str(os.getpid()))
     try:

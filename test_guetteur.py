@@ -57,6 +57,19 @@ class Envies(unittest.TestCase):
         self.assertEqual([e["nom"] for e in todo], ["Porc au caramel", "Gratin de ravioles"])
         self.assertEqual(todo[1]["url"], "https://exemple.fr/ravioles")
 
+    def test_apercu_des_envies(self):
+        maintenant = time.time()
+        journal = {G.norm("Gratin de ravioles"): {"dernier": maintenant - 3600, "resultat": "introuvable"}}
+        envies = [{"nom": "poireaux", "type": "ingredient", "jour": "Jeu"}, {"nom": "Tendron de veau", "jour": "Mar"},
+                  {"nom": "Porc au caramel", "jour": "Mar"}, {"nom": "Gratin de ravioles"},
+                  {"nom": "porc au caramel"}]                                   # doublon, autre casse
+        lignes = G.etat_envies(envies, self.BASE, journal, maintenant)
+        self.assertEqual([l[0] for l in lignes], ["poireaux (pour Jeu)", "Tendron de veau (pour Mar)",
+                                                  "Porc au caramel (pour Mar)", "Gratin de ravioles"])
+        self.assertEqual([l[2] for l in lignes], [False, False, True, False])
+        self.assertIn("Tendron de veau printanier", lignes[1][1])
+        self.assertIn("nouvel essai", lignes[3][1])
+
     def test_pas_de_nouvel_essai_trop_tot(self):
         maintenant = time.time()
         journal = {G.norm("Porc au caramel"): {"dernier": maintenant - 3600, "resultat": "introuvable"}}

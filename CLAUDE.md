@@ -109,6 +109,10 @@ ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes d
 - **réglages du PC**, jamais dans le dépôt public : `MIMS_HUB_URL` et `MIMS_HUB_TOKEN` (setx). Sans eux, il
   ne fait rien. Les envies n'arrivent au hub que si « Partage à deux » est activé sur le téléphone.
 `python guetteur.py --plat "porc au caramel" --essai` cherche sans rien écrire. Tests : `test_guetteur.py`.
+**Raccourci « Guetteur des Mim's »** du Bureau (`regler_guetteur.ps1`, posé par `installer_guetteur.ps1`) : la
+1re fois, demande le mot de passe de partage (masqué), le vérifie auprès du hub et l'enregistre dans les deux
+réglages ; l'adresse vient de `hub/DEPLOIEMENT.md`. Ensuite, montre les envies du hub et ce que le guetteur en
+fera (`guetteur.py --apercu`), et propose de lancer la recherche tout de suite.
 
 ### Lancer les tests
 - Navigateur : `node lancer_tests.mjs` (tous les `test_*.js`, `--sombre` pour clair PUIS sombre). playwright-core

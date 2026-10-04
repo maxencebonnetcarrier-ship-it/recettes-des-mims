@@ -2,6 +2,7 @@
 .SYNOPSIS
   Installe (ou retire) la tache planifiee du guetteur des envies de Recettes des Mim's.
 .DESCRIPTION
+  Pose aussi le raccourci « Guetteur des Mim's » du Bureau (regler_guetteur.ps1).
   Toutes les 30 minutes, tant que la session est ouverte, pythonw lance guetteur.py sans fenetre.
   Le guetteur ne fait rien tant que MIMS_HUB_URL et MIMS_HUB_TOKEN ne sont pas regles (setx).
   Journal : %LOCALAPPDATA%\mims-guetteur\guetteur.log
@@ -12,9 +13,12 @@
 param([switch]$Retirer)
 $ErrorActionPreference = 'Stop'
 $Nom = 'Recettes des Mims - guetteur'
+# raccourci du Bureau : regler le mot de passe la 1re fois, voir les envies, lancer une recherche
+$Raccourci = Join-Path ([Environment]::GetFolderPath('Desktop')) "Guetteur des Mim's.lnk"
 if ($Retirer) {
   Unregister-ScheduledTask -TaskName $Nom -Confirm:$false -ErrorAction SilentlyContinue
-  Write-Host "Tache « $Nom » retiree."
+  Remove-Item -LiteralPath $Raccourci -ErrorAction SilentlyContinue
+  Write-Host "Tache « $Nom » et raccourci retires."
   exit 0
 }
 $Depot = $PSScriptRoot
@@ -27,3 +31,10 @@ $Reglages = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
 Register-ScheduledTask -TaskName $Nom -Action $Action -Trigger $Declencheur -Settings $Reglages -Force `
   -Description 'Lit les envies de plats des telephones, ajoute la recette (Marmiton, Saveurs, Journal des Femmes), teste et met l''app en ligne. guetteur.py' | Out-Null
 Write-Host "Tache « $Nom » installee : toutes les 30 min, $SansFenetre $Depot\guetteur.py"
+$Lien = (New-Object -ComObject WScript.Shell).CreateShortcut($Raccourci)
+$Lien.TargetPath = (Get-Command powershell.exe).Source
+$Lien.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $Depot 'regler_guetteur.ps1') + '"'
+$Lien.WorkingDirectory = $Depot
+$Lien.Description = 'Guetteur des envies : regler le partage, voir les envies, lancer une recherche'
+$Lien.Save()
+Write-Host "Raccourci pose : $Raccourci"
