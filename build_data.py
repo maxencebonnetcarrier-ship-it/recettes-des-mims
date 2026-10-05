@@ -161,7 +161,7 @@ def norm(s):
 import re as _re
 # mentions de difficulté / marketing à retirer des titres
 _MENTIONS = [
-    "la meilleure recette", "recette originale", "tres facile", "rapide et facile",
+    "la meilleure recette", "la recette", "recette originale", "tres facile", "rapide et facile",
     "simple et rapide", "succulente et rapide", "tout simple et parfume",
     "tout simple", "pour les nuls", "inratable", "succulente", "express",
     "facile", "parfaite", "parfait", "originale", "simple",
@@ -185,7 +185,9 @@ def nettoyer_nom(nom):
                 s = s[: match.start()].strip(" ,.-:")
                 change = True
                 break
-    return s
+    # majuscule initiale : certaines fiches Marmiton sont titrées tout en minuscules (« gratin de ravioles »).
+    # Vérifié le 05/10 : aucun nom déjà en base ne commençait par une minuscule (notes et favoris intacts).
+    return s[:1].upper() + s[1:]
 
 
 def charger(dossier):

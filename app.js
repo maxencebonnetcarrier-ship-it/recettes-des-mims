@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 39;
+  const VERSION_APP = 40;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -440,10 +440,43 @@
         delete e[k]; change = true;
         return;
       }
-      if (rangDe(v) !== rang) { delete e[k]; change = true; }
+      if (rangDe(v) !== rang) {
+        // v40 : un plat DEMANDÉ (envie de plat avec ce jour) et jamais servi est REPORTÉ, pas effacé : sur ce
+        // jour cette semaine s'il n'est pas passé, sinon la semaine prochaine. Cas réel du 05/10 : « Gratin
+        // ravioles pour mardi » demandé un dimanche (ancienne version : épingle datée de la semaine finie),
+        // recette ajoutée par le guetteur le lundi ; la demande était effacée et le plat jamais servi.
+        const envie = v && v.nom && rangDe(v) !== null && rangDe(v) < rang && enviePlatDuJour(v.nom, k);
+        if (envie && !serviLaSemaine(v.nom, rangDe(v))) {
+          const s1 = JOURS.indexOf(k) < indexAujourdhui();
+          const cible = semaineDuRang(rang + (s1 ? 1 : 0));
+          const deja = e[cleEpingle(k, s1)];
+          if (s1 || !deja || deja === v) {
+            if (!deja || deja === v || rangDe(deja) !== rangSemaine(cible.an, cible.num)) {
+              e[cleEpingle(k, s1)] = { nom: v.nom, t: v.t, num: cible.num, an: cible.an };
+            }
+            if (s1) delete e[k];
+            envie.an = cible.an; envie.num = cible.num;   // l'envie dit la semaine visée (et « ✕ » retire la bonne)
+            save("envies");
+            change = true;
+            return;
+          }
+        }
+        delete e[k]; change = true;
+      }
     });
     if (change) save("epingles");
     return change;
+  }
+  // envie de PLAT encore notée pour ce jour (la demande qui a posé l'épingle)
+  const enviePlatDuJour = (nom, jour) => state.envies.find((x) => x && typeof x === "object" && x.type !== "ingredient"
+    && x.jour === jour && norm(x.nom) === norm(nom)) || null;
+  // le plat a-t-il été servi (menu de fin de semaine) ou cuisiné (historique) la semaine de rang r ?
+  function serviLaSemaine(nom, r) {
+    const rec = trouverRecette(nom);
+    const n = rec ? rec.nom : nom;
+    return (state.servis || []).some((s) => rangDe(s) === r && (s.noms || []).includes(n))
+      || state.historique.some((h) => rangDe(h) === r && h.nom === n)
+      || (!!state.semaine && rangDe(state.semaine) === r && state.semaine.plan.some((p) => p && p.nom === n));
   }
 
   function desepingler(jour, s1) {

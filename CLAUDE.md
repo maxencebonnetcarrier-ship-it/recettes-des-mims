@@ -197,6 +197,13 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
   s'applique au menu S+1 (seul ce jour change s'il est déjà préparé), la semaine en cours n'est pas
   touchée, et le lundi venu elle devient l'épingle du jour. Avant, le plat s'imposait sur le jour passé,
   toute la semaine était re-tirée, et il n'était jamais servi.
+- **Plat demandé jamais servi** (v40) : au changement de semaine, l'épingle d'un plat qui vient d'une envie de
+  plat encore notée pour ce jour, et qui n'a été ni servi (`servis`, menu) ni cuisiné (historique), est
+  REPORTÉE (`purgerEpingles`) : ce jour cette semaine s'il n'est pas passé, sinon `Jour+1`. L'envie prend la
+  semaine visée. Cas du 05/10 : « Gratin ravioles pour mardi » demandé un dimanche depuis une version
+  antérieure à la v37, recette ajoutée par le guetteur le lundi ; la demande était effacée.
+- **Titres** : `nettoyer_nom` (build_data.py) retire aussi « : la recette » (Journal des Femmes) et met une
+  majuscule initiale (fiches Marmiton en minuscules). Aucun nom déjà en base n'en a été changé (05/10).
 - **Envie d'un ingrédient** (v36, Réglages › Mes envies) : un mot présent dans les ingrédients de la base
   (« poireaux ») met au menu un plat qui en contient, le jour choisi ou un des jours qui restent. Ce n'est
   pas une épingle : style du jour, anti-répétition et exclusions sont respectés (style relâché seulement

@@ -171,6 +171,31 @@
     const fiche9 = document.querySelector('#view-semaine details[data-cle="jour-Mar"]');
     if (!fiche9 || fiche9.querySelector('button[data-act="regen-day"]')) ech("9. mardi n'est plus protégé comme plat imposé");
 
+    /* 10. Plat DEMANDÉ jamais servi (v40) : au changement de semaine, sa demande est reportée au lieu
+           d'être effacée. Cas réel du 05/10 : « Gratin ravioles pour mardi » demandé un dimanche depuis une
+           ancienne version (épingle datée de la semaine finie), recette ajoutée par le PC le lundi. */
+    st.semaine = null; st.suivante = null; st.servis = []; st.historique = []; st.epingles = {}; st.envies = [];
+    figer("2026-10-15T12:00:00");                       // jeudi, semaine 42
+    M.generer();
+    const s42 = st.semaine.plan.map((p) => p.nom);
+    const pasServi = ["Chou farci", "Rôti de veau", "Pot-au-feu"].filter((n) => !s42.includes(n));
+    const servi = st.semaine.plan.find((p) => p.jour === "Jeu");
+    st.envies = [{ nom: pasServi[0], jour: "Mar" }, { nom: pasServi[1], jour: "Lun" }, { nom: servi.nom, jour: "Jeu" }];
+    st.epingles = { Mar: { nom: pasServi[0], t: 1, num: 42, an: 2026 }, Lun: { nom: pasServi[1], t: 1, num: 42, an: 2026 },
+                    Jeu: { nom: servi.nom, t: 1, num: 42, an: 2026 }, Ven: { nom: pasServi[2], t: 1, num: 42, an: 2026 } };
+    figer("2026-10-20T12:00:00");                       // mardi, semaine 43 : lundi est passé, mardi non
+    onglet("semaine");
+    const mar10 = st.semaine.plan.find((p) => p.jour === "Mar");
+    res.details.reporte = mar10 && mar10.nom;
+    if (!mar10 || mar10.nom !== pasServi[0] || !mar10.epingle) ech(`10. « ${pasServi[0]} » demandé mardi et jamais servi n'est pas reporté ce mardi : ${JSON.stringify(mar10)}`);
+    const lun1 = st.epingles["Lun+1"];
+    if (!lun1 || lun1.nom !== pasServi[1] || lun1.num !== 44) ech(`10. lundi déjà passé : « ${pasServi[1]} » devait viser lundi prochain : ${JSON.stringify(st.epingles)}`);
+    const envLun = st.envies.find((x) => x.nom === pasServi[1]);
+    if (!envLun || envLun.num !== 44) ech(`10. l'envie de lundi n'est pas datée de la semaine 44 : ${JSON.stringify(envLun)}`);
+    if (st.epingles.Jeu && st.epingles.Jeu.nom === servi.nom) ech(`10. « ${servi.nom} », déjà servi, est encore imposé`);
+    if (st.epingles.Ven && st.epingles.Ven.nom) ech("10. une épingle sans envie (« Ven ») a été reportée");
+    st.envies = []; st.epingles = {};
+
     /* 7. Une envie d'ingrédient s'efface d'elle-même quand sa semaine est passée. */
     figer("2026-10-19T12:00:00");                       // semaine 43
     onglet("semaine");

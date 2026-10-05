@@ -129,6 +129,15 @@ class Choix(unittest.TestCase):
         self.assertIsNone(r)
         self.assertTrue(any("titre" in x for x in refus))
 
+    def test_titres_nettoyes(self):
+        # cas réels du 05/10 : « Ramen : la recette » (Journal des Femmes), titre Marmiton en minuscules
+        self.assertEqual(G.A.nettoyer_nom("Ramen : la recette"), "Ramen")
+        self.assertEqual(G.A.nettoyer_nom("gratin de ravioles et courgettes"), "Gratin de ravioles et courgettes")
+        self.assertEqual(G.A.nettoyer_nom("Porc au caramel : la meilleure recette"), "Porc au caramel")
+        self.assertEqual(G.A.nettoyer_nom("Émincés de poulet sauce moutarde"), "Émincés de poulet sauce moutarde")
+        # le nom nettoyé est toujours retrouvé par l'envie écrite sur le téléphone
+        self.assertIsNotNone(G.trouver_recette("Gratin ravioles", [{"nom": "Gratin de ravioles et courgettes"}]))
+
     def test_lien_fourni_prend_le_nom_de_l_envie(self):
         # lien donné par l'utilisateur avec SON nom : l'épingle du jour doit retrouver la recette
         lue = recette_glaneur("Porc au caramel", M + "porc-au-caramel_2.aspx", ["échine de porc", "sucre"])
