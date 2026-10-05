@@ -150,6 +150,72 @@ class Choix(unittest.TestCase):
         self.assertIsNone(r)
 
 
+class Suivi(unittest.TestCase):
+    """Résultat de chaque envie écrit sur le hub (champ « guetteur »), lu par l'app (Mes envies)."""
+    BASE = [{"nom": "Tendron de veau printanier"}, {"nom": "Porc caramel"}]
+
+    def test_nettoyage_garde_les_envies_de_plats_encore_notees(self):
+        ancien = {G.norm("Porc au caramel"): {"nom": "Porc au caramel", "etat": "en_cours"},
+                  G.norm("Gratin"): {"nom": "Gratin", "etat": "introuvable"},     # envie retirée du téléphone
+                  G.norm("poireaux"): {"nom": "poireaux", "etat": "introuvable"}}  # ingrédient : pas suivi
+        envies = [{"nom": "porc au caramel", "jour": "Mar"}, {"nom": "poireaux", "type": "ingredient"}]
+        self.assertEqual(set(G.statuts_nettoyes(ancien, envies)), {G.norm("Porc au caramel")})
+
+    def test_envie_retrouvee_dans_la_base_devient_ajoutee(self):
+        # recette trouvée à une passe, envoyée seulement à la suivante (envoi en attente rattrapé)
+        statuts = {G.norm("porc caramel"): {"nom": "porc caramel", "etat": "attente", "t": 1}}
+        G.statuts_retrouves(statuts, [{"nom": "porc caramel"}], self.BASE, 2000.0)
+        s = statuts[G.norm("porc caramel")]
+        self.assertEqual((s["etat"], s["recette"]), ("ajoutee", "Porc caramel"))
+        self.assertEqual(s["t"], 2000000)
+
+    def test_statut_et_prochain_essai(self):
+        s = G.statut("Gratin", "introuvable", maintenant=1000.0)
+        self.assertEqual(s["prochain"], (1000 + 24 * 3600) * 1000)
+        self.assertNotIn("prochain", G.statut("Porc", "ajoutee", recette="Porc caramel", maintenant=1000.0))
+
+    def test_raison_de_refus_lisible(self):
+        detail = ("Porc au miel (https://x) : contient un ingrédient exclu par défaut : sucré-salé (miel); "
+                  "Porc laqué (https://y) : contient un ingrédient exclu par défaut : sucré-salé (miel); "
+                  "Porc (https://z) : titre « Porc » : l'envie « Porc au caramel » ne le retrouverait pas")
+        r = G.raison_courte(detail)
+        self.assertIn("sucré-salé (miel)", r)
+        self.assertEqual(r.count("sucré-salé"), 1)
+        self.assertLessEqual(len(r), 160)
+
+    def test_adresse_du_site_depuis_le_depot(self):
+        self.assertEqual(G.site_en_ligne("git@github-maxence:maxencebonnetcarrier-ship-it/recettes-des-mims.git"),
+                         "https://maxencebonnetcarrier-ship-it.github.io/recettes-des-mims/")
+        self.assertEqual(G.site_en_ligne("https://github.com/moi/app"), "https://moi.github.io/app/")
+        self.assertIsNone(G.site_en_ligne("C:/temp/remote.git"))
+
+    def test_ecrit_les_statuts_sur_le_faux_hub_sans_toucher_aux_envies(self):
+        s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+        hub = subprocess.Popen([sys.executable, os.path.join(ICI, "test_hub.py"), str(port)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            url = f"http://127.0.0.1:{port}/"
+            envies = {"envies": {"v": [{"nom": "Porc au caramel", "jour": "Mar"}], "t": 5}}
+            for _ in range(50):
+                try:
+                    corps = json.dumps({"token": "test-token", "patch": envies}).encode()
+                    urllib.request.urlopen(urllib.request.Request(url, data=corps, method="POST"), timeout=2).read()
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            statuts = {G.norm("Porc au caramel"): G.statut("Porc au caramel", "en_cours", maintenant=1000.0)}
+            G.ecrire_statuts(url, "test-token", statuts)
+            etat = G.lire_hub(url, "test-token")
+            self.assertEqual(G.statuts_du_hub(etat), statuts)
+            self.assertGreater(etat["guetteur"]["v"]["passe"], 0)
+            self.assertEqual(G.envies_du_hub(etat), [{"nom": "Porc au caramel", "jour": "Mar"}])
+            with self.assertRaises(Exception):
+                G.ecrire_statuts(url, "mauvais", statuts)
+        finally:
+            hub.terminate()
+            hub.wait()
+
+
 class Version(unittest.TestCase):
     def test_monte_les_trois_fichiers_sans_toucher_aux_fins_de_ligne(self):
         d = tempfile.mkdtemp()

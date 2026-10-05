@@ -125,7 +125,7 @@
     const env = st.envies.find((x) => x && x.nom === "Chou farci");
     if (!env || env.num !== 42) ech(`8a. envie enregistrée sans la semaine 42 : ${JSON.stringify(env)}`);
     ouvrirEnvies();
-    const chip = [...document.querySelectorAll("#view-reglages .chip.envie")].find((c) => c.textContent.includes("Chou farci"));
+    const chip = [...document.querySelectorAll("#view-reglages .envie-l")].find((c) => c.textContent.includes("Chou farci"));
     if (!chip || !/semaine prochaine/.test(chip.textContent)) ech("8a. l'envie n'indique pas « semaine prochaine »");
     // 8b. ouvrir la semaine prochaine : mardi = Chou farci, imposé (pas de « Changer »)
     vueS("1");

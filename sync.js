@@ -13,6 +13,10 @@
   // vu la semaine se terminer, il ne noterait donc rien lui-même. « suivante » (v36) : le menu
   // de la semaine prochaine préparé d'avance, pour que les deux téléphones fassent les mêmes courses.
   const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies", "epingles", "saisonOff", "servis", "suivante"];
+  // Champs en LECTURE SEULE (v38) : écrits par un autre que les téléphones, jamais renvoyés au hub.
+  // « guetteur » : où en est chaque envie de plat, écrit par guetteur.py sur le PC. Un téléphone qui le
+  // renverrait (avec l'horodatage de sa dernière lecture) pourrait effacer un résultat plus récent.
+  const CHAMPS_LECTURE = ["guetteur"];
 
   let conf = charger();
   let horodatages = {};   // champ -> dernier horodatage local connu
@@ -87,7 +91,7 @@
 
   function appliquer(distant, state) {
     let change = false;
-    CHAMPS.forEach((k) => {
+    CHAMPS.concat(CHAMPS_LECTURE).forEach((k) => {
       const d = distant[k];
       if (!d || d.v === undefined) return;
       // Les épingles se fusionnent JOUR par JOUR, comme les cases de courses : sinon celui

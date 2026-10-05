@@ -38,7 +38,12 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `test_suivante.js` — semaine suivante (S+1) : menu préparé d'avance sans les plats de la semaine, actions
   sur S+1 seulement, jours « S+1 » dans Courses, menu repris tel quel le lundi, cases datées par semaine.
 - `test_guetteur.py` — guetteur des envies (sans réseau) : quelles envies chercher, recherche dans les plans de
-  site, choix et refus, note des lecteurs, montée de version, lecture du hub (faux hub `test_hub.py`).
+  site, choix et refus, note des lecteurs, montée de version, lecture du hub (faux hub `test_hub.py`), suivi
+  écrit sur le hub.
+- `test_suivi_envies.js` — suivi du guetteur dans Réglages › Mes envies : un état par envie de plat, dernier
+  passage du PC, champ « guetteur » reçu mais JAMAIS renvoyé par le téléphone. Noms de plats FICTIFS exprès :
+  un vrai nom finirait par entrer dans la base (ajouté par le guetteur) et le test, devenu rouge, bloquerait
+  toute publication du guetteur (constaté le 05/10).
 - `test_envies.js` — envie d'un ingrédient : propositions, plat au menu le jour choisi (ou la semaine
   prochaine si le jour est passé), « Changer » garde l'ingrédient, un vrai nom de plat reste imposé,
   et un plat demandé pour un jour passé est imposé ce jour-là la semaine prochaine.
@@ -106,6 +111,13 @@ ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes d
 - **ne publie jamais** si le dossier a des modifications en cours (un humain ou un autre outil y travaille) ;
 - un plat introuvable ou refusé est retenté 24 h plus tard. Journal, plans et log :
   `%LOCALAPPDATA%\mims-guetteur` ;
+- **écrit où en est chaque envie** sur le hub (v38), champ `guetteur` : `{ passe, envies: { nom normalisé :
+  { etat, detail, recette, t, prochain } } }`, états `en_cours`, `attente`, `ajoutee`, `introuvable`,
+  `refusee`, `erreur`. Il en est le SEUL auteur : `sync.js` le range dans `CHAMPS_LECTURE`, reçu mais jamais
+  renvoyé. Réglages › Mes envies l'affiche sous chaque plat, avec « le PC a regardé tes envies il y a … »
+  (alerte au-delà de 2 h ; le guetteur réécrit au moins toutes les 50 min tant qu'il y a des envies de plats).
+  Il n'annonce « ajoutée » qu'une fois la nouvelle version servie par GitHub Pages (6 min au plus) ; le
+  téléphone qui la voit sans avoir la recette se met à jour tout seul (`recupererAjouts`, un essai par 2 min) ;
 - **réglages du PC**, jamais dans le dépôt public : `MIMS_HUB_URL` et `MIMS_HUB_TOKEN` (setx). Sans eux, il
   ne fait rien. Les envies n'arrivent au hub que si « Partage à deux » est activé sur le téléphone.
 `python guetteur.py --plat "porc au caramel" --essai` cherche sans rien écrire. Tests : `test_guetteur.py`.

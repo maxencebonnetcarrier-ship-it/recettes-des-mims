@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 37;
+  const VERSION_APP = 38;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -1472,6 +1472,77 @@
     return `<p class="hint">${titre}</p><div class="chips props">${tous.slice(0, 8).map((r) =>
       `<button class="chip prop" data-act="envie-prop" data-nom="${esc(r.nom)}">${esc(r.nom)} <em>${esc(r.cat)}</em></button>`).join("")}</div>`;
   }
+  /* ---------- suivi des envies par le guetteur du PC (v38) ----------
+     guetteur.py écrit sur le hub, champ « guetteur » (lecture seule pour les téléphones, voir sync.js), où
+     en est chaque envie de PLAT : en_cours · attente · ajoutee · introuvable · refusee · erreur, et quand il
+     a regardé les envies pour la dernière fois (« passe »). */
+  const suiviPC = () => (state.guetteur && typeof state.guetteur === "object" ? state.guetteur : null);
+  const suiviEnvie = (nom) => { const g = suiviPC(); return g && g.envies ? g.envies[norm(nom)] || null : null; };
+  function quandEssai(ms) {
+    if (!ms) return "plus tard";
+    const d = new Date(ms), auj = new Date();
+    const h = `${d.getHours()} h${d.getMinutes() ? String(d.getMinutes()).padStart(2, "0") : ""}`;
+    const ecart = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) -
+      new Date(auj.getFullYear(), auj.getMonth(), auj.getDate())) / JOUR_MS);
+    if (ecart <= 0) return `aujourd'hui vers ${h}`;
+    if (ecart === 1) return `demain vers ${h}`;
+    return `le ${d.getDate()}/${d.getMonth() + 1} vers ${h}`;
+  }
+  function depuis(ms) {
+    const min = Math.max(0, Math.round((Date.now() - ms) / 60000));
+    if (min < 1) return "à l'instant";
+    if (min < 60) return `il y a ${min} min`;
+    if (min < 24 * 60) return `il y a ${Math.floor(min / 60)} h`;
+    return `le ${new Date(ms).toLocaleDateString("fr-FR")}`;
+  }
+  // texte (et classe) du suivi d'une envie de plat ; maj = recette à récupérer par une mise à jour
+  function statutEnvie(nom) {
+    const r = trouverRecette(nom);
+    const s = suiviEnvie(nom);
+    if (r) return { cls: "ok", txt: s && s.etat === "ajoutee" ? `ajoutée par le PC : ${r.nom}` : `dans ta base : ${r.nom}` };
+    if (!s) return { cls: "", txt: "le PC ne l'a pas encore cherchée" };
+    const essai = `nouvel essai ${quandEssai(s.prochain)}`;
+    switch (s.etat) {
+      case "en_cours": return { cls: "encours", txt: `le PC la cherche…${s.detail ? " " + s.detail : ""}` };
+      case "attente": return { cls: "", txt: s.detail || "le PC réessaie à sa prochaine passe" };
+      case "ajoutee": return { cls: "ok", txt: `ajoutée par le PC : ${s.recette || nom}, pas encore dans cette version de l'app`, maj: true };
+      case "introuvable": return { cls: "ko", txt: `introuvable sur Marmiton, Saveurs et le Journal des Femmes · ${essai}` };
+      case "refusee": return { cls: "ko", txt: `trouvée mais refusée${s.detail ? ` (${s.detail})` : ""} · ${essai}` };
+      default: return { cls: "ko", txt: `erreur pendant la recherche · ${essai}` };
+    }
+  }
+  /** Recettes ajoutées par le PC mais absentes de cette version de l'app : à récupérer. */
+  function ajoutsEnAttente() {
+    return state.envies.filter((e) => !estEnvieIngr(e)).map((e) => (e && e.nom ? e.nom : e)).filter((nom) => {
+      const s = suiviEnvie(nom);
+      return !!s && s.etat === "ajoutee" && Date.now() - (s.t || 0) < 7 * JOUR_MS && !trouverRecette(nom);
+    });
+  }
+  // la recette ajoutée par le PC arrive toute seule : mise à jour de l'app (au plus un essai toutes les 2 min)
+  let dernierEssaiMaj = 0;
+  function recupererAjouts() {
+    if (!ajoutsEnAttente().length || Date.now() - dernierEssaiMaj < 120000) return;
+    dernierEssaiMaj = Date.now();
+    forcerMiseAJour();
+  }
+  // en tête de Mes envies : quand le PC les a regardées
+  function enteteSuivi() {
+    if (!state.envies.some((e) => !estEnvieIngr(e))) return "";
+    const g = suiviPC();
+    if (!g || !g.passe) {
+      return `<p class="hint suivi-pc">Le PC n'a pas encore lu tes envies de plats. Il les lit toutes les 30 min quand il
+        est allumé, si « Partage à deux » est activé ici.</p>`;
+    }
+    const muet = Date.now() - g.passe > 2 * 3600000;
+    return `<p class="hint suivi-pc">Le PC a regardé tes envies ${esc(depuis(g.passe))}.${muet
+      ? " Il ne les a pas relues depuis plus de 2 h : est-il allumé ?" : ""}</p>`;
+  }
+  const ligneEnvie = (i, nom, meta, s) => `<div class="envie-l">
+      <div class="el-t"><span class="el-n">${esc(nom)}</span>${meta ? ` <em>${esc(meta)}</em>` : ""}</div>
+      <button class="x" data-act="del-envie" data-i="${i}" title="Retirer" aria-label="Retirer ${esc(nom)}">✕</button>
+      ${s ? `<div class="el-s ${s.cls}">${esc(s.txt)}${s.maj ? ` <button class="lien" data-act="maj-app">mettre l'app à jour</button>` : ""}</div>` : ""}
+    </div>`;
+
   function sectionEnvies() {
     let h = `<p class="hint">Un plat que tu aimerais voir ajouté, ou un <strong>ingrédient</strong> dont tu as
         envie (ex. : poireaux) : l'app met au menu un plat qui en contient, le jour choisi. Pour un plat,
@@ -1490,24 +1561,23 @@
         </select>
         <button id="btn-add-envie">Ajouter</button>
       </div>
-      <div class="chips">`;
+      ${enteteSuivi()}
+      <div class="envies-liste">`;
+    const jourLong = (j) => JOURS_LONG[JOURS.indexOf(j)].toLowerCase();
     state.envies.forEach((e, i) => {
       if (estEnvieIngr(e)) {
-        // envie d'ingrédient : son jour, et la semaine qu'elle vise
-        const quand = [e.jour, rangDe(e) === rangCourant() ? "cette semaine" : "semaine prochaine"].filter(Boolean).join(" · ");
-        h += `<span class="chip envie">${esc(e.nom)} <em>(ingrédient · ${esc(quand)})</em><button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
+        // envie d'ingrédient : son jour, et la semaine qu'elle vise (l'app la sert seule, pas le PC)
+        const quand = [e.jour ? jourLong(e.jour) : "", rangDe(e) === rangCourant() ? "cette semaine" : "semaine prochaine"].filter(Boolean).join(" · ");
+        h += ligneEnvie(i, e.nom, `ingrédient · ${quand}`, null);
         return;
       }
-      // une envie est soit un simple texte (ancien format), soit { nom, url, jour }
+      // une envie de plat est soit un simple texte (ancien format), soit { nom, url, jour }
       const nom = e && e.nom ? e.nom : e;
       const jour = e && e.jour ? e.jour : null;
-      const url = e && e.url ? e.url : null;
-      // même recherche souple que le menu : sinon « Tendron de veau » restait affiché
-      // « en attente » alors que « Tendron de veau printanier » est bien dans la base.
-      const trouvee = trouverRecette(nom);
-      const attente = jour && !trouvee ? ` · en attente d'ajout` : "";
       const s1 = !!(e && typeof e === "object" && rangDe(e) === rangCourant() + 1);
-      h += `<span class="chip envie">${esc(nom)}${jour ? ` <em>(${esc(jour)}${s1 ? " · semaine prochaine" : ""}${esc(attente)})</em>` : ""}${url ? " · lien" : ""}<button data-act="del-envie" data-i="${i}" title="Retirer">✕</button></span>`;
+      const meta = ["plat", jour ? `pour ${jourLong(jour)}` : "", s1 ? "semaine prochaine" : "", e && e.url ? "lien fourni" : ""].filter(Boolean).join(" · ");
+      // même recherche souple que le menu (trouverRecette) : « Tendron de veau » est bien dans la base
+      h += ligneEnvie(i, nom, meta, statutEnvie(nom));
     });
     return h + `</div>`;
   }
@@ -1870,6 +1940,15 @@
       const quand = `${JOURS_LONG[JOURS.indexOf(jour)].toLowerCase()}${s1 ? " de la semaine prochaine" : ""}`;
       return toast(trouverRecette(v) ? `${v} imposé ${quand}` : `Noté — ${v} sera imposé ${quand} dès que je l'ai ajouté`);
     }
+    if (act === "maj-app") {
+      t.disabled = true; t.textContent = "recherche…";
+      forcerMiseAJour().then((neuf) => {
+        if (neuf) return;                        // la page se recharge d'elle-même
+        t.disabled = false; t.textContent = "mettre l'app à jour";
+        toast("Pas encore en ligne : réessaie dans une minute");
+      });
+      return;
+    }
     if (act === "del-envie") {
       const e = state.envies[+t.dataset.i];
       const j = e && e.jour;
@@ -1935,8 +2014,10 @@
     exclure: (mot) => { if (!ajouterExclusion(mot)) return 0; return appliquerExclusion(); },
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
-    rafraichir: () => { try { RENDER[vueActive()](); } catch (e) {} },
+    rafraichir: () => { try { RENDER[vueActive()](); } catch (e) {} recupererAjouts(); },
+    ajoutsEnAttente,
   };
 
-  document.addEventListener("DOMContentLoaded", () => show("semaine"));
+  document.addEventListener("DOMContentLoaded", () => { show("semaine"); recupererAjouts(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) recupererAjouts(); });
 })();

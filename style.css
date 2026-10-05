@@ -364,6 +364,17 @@ button.x:active { background: var(--danger); border-color: var(--danger); color:
 }
 .chip.promo, .chip.fav-chip { border-color: var(--btn-ac); }
 .chip button { width: 20px; height: 20px; border: none; border-radius: 50%; background: var(--ln); color: inherit; font-size: .65rem; cursor: pointer; }
+/* v38 : liste des envies, avec le suivi du guetteur du PC sous chaque plat */
+.envies-liste { border-top: 1px solid var(--ln); margin: 4px 0 10px; }
+.envie-l { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--ln); }
+.el-t { min-width: 0; overflow-wrap: anywhere; }
+.el-n { font-family: var(--serif); font-size: .95rem; }
+.el-t em { font-size: .72rem; color: var(--soft); }
+.el-s { grid-column: 1 / -1; font-family: var(--serif); font-style: italic; font-size: .78rem; line-height: 1.35; color: var(--mut); }
+.el-s.ok { color: var(--ac); }
+.el-s.encours { color: var(--ink); }
+.el-s .lien { font-style: normal; color: var(--ac); padding: 0; }
+.suivi-pc { text-align: left; padding: 6px 0 2px; }
 /* v36 : propositions de plats sous le champ des envies — la puce entière se touche */
 button.chip.prop { padding: 6px 12px; color: var(--ink); cursor: pointer; text-align: left; }
 button.chip.prop em { font-family: var(--sans); font-style: normal; font-size: .68rem; color: var(--soft); }

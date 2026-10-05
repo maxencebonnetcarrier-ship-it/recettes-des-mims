@@ -172,6 +172,97 @@ def etat_envies(envies, recettes, journal, maintenant):
     return out
 
 
+# ---------- suivi des envies, écrit sur le hub (v38) ----------
+# Champ « guetteur » du hub : { v: { passe: ms, envies: { nom normalisé: statut } }, t: ms }. Le guetteur en
+# est le SEUL auteur : les téléphones le lisent (Réglages › Mes envies) et ne le renvoient jamais (sync.js).
+# États : en_cours · attente (réessai à la prochaine passe) · ajoutee · introuvable · refusee · erreur.
+def statuts_du_hub(state):
+    v = (state.get("guetteur") or {}).get("v") or {}
+    return dict(v.get("envies") or {}) if isinstance(v, dict) else {}
+
+
+def statuts_nettoyes(statuts, envies):
+    """Ne garde que les envies de PLATS encore notées sur les téléphones."""
+    gardees = {norm(e["nom"] if isinstance(e, dict) else e) for e in envies
+               if (isinstance(e, str) or (e.get("nom") and e.get("type") != "ingredient"))}
+    return {k: v for k, v in statuts.items() if k in gardees}
+
+
+def statut(nom, etat, detail="", recette=None, maintenant=None):
+    maintenant = maintenant or time.time()
+    s = {"nom": nom, "etat": etat, "t": int(maintenant * 1000)}
+    if detail:
+        s["detail"] = detail[:200]
+    if recette:
+        s["recette"] = recette
+    if etat in RELANCE:
+        s["prochain"] = int((maintenant + RELANCE[etat]) * 1000)
+    return s
+
+
+def statuts_retrouves(statuts, envies, recettes, maintenant):
+    """Une envie suivie que la base retrouve maintenant (envoi rattrapé, ajout à la main) est « ajoutée »."""
+    for e in envies:
+        nom = e["nom"] if isinstance(e, dict) else e
+        s = statuts.get(norm(nom))
+        r = trouver_recette(nom, recettes)
+        if s and r and s.get("etat") != "ajoutee":
+            statuts[norm(nom)] = statut(s.get("nom") or nom, "ajoutee", recette=r["nom"], maintenant=maintenant)
+
+
+def raison_courte(detail):
+    """« Nom (url) : raison; … » → les raisons distinctes, lisibles sur un téléphone."""
+    raisons = []
+    for morceau in (detail or "").split("; "):
+        r = morceau.split(") : ", 1)[-1].strip()
+        r = re.sub(r"^titre « .* » : ", "", r)
+        if r.startswith("l'envie"):
+            r = "titre trop différent du nom demandé"
+        if r and r not in raisons:
+            raisons.append(r)
+    return " · ".join(raisons)[:160]
+
+
+def ecrire_statuts(url, token, statuts):
+    """Écrit le suivi sur le hub. Ne touche à aucun autre champ (le hub fusionne champ par champ)."""
+    t = int(time.time() * 1000)
+    corps = json.dumps({"token": token, "patch": {"guetteur": {"v": {"passe": t, "envies": statuts}, "t": t}}},
+                       ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=corps, method="POST",
+                                 headers={"Content-Type": "text/plain;charset=utf-8", "User-Agent": UA})
+    try:
+        reponse = urllib.request.urlopen(req, timeout=60).read()
+    except urllib.error.HTTPError as e:
+        reponse = e.read()
+    j = json.loads(reponse.decode("utf-8"))
+    if not j.get("ok"):
+        raise RuntimeError("le hub refuse l'écriture (" + str(j.get("error") or "refus") + ")")
+
+
+def site_en_ligne(remote):
+    """Adresse GitHub Pages du dépôt (git@hôte:propriétaire/dépôt.git ou https://github.com/…), sinon None."""
+    m = re.search(r"(?:github[^:/]*[:/])([^/]+)/([^/]+?)(?:\.git)?/?$", remote or "")
+    return f"https://{m.group(1)}.github.io/{m.group(2)}/" if m else None
+
+
+def attendre_en_ligne(version, delai=360, pas=15):
+    """Après l'envoi, GitHub Pages met environ une minute à servir la nouvelle version. On l'attend avant
+    d'annoncer « ajoutée » : sinon le téléphone chercherait la mise à jour avant qu'elle existe."""
+    code, remote = git("remote", "get-url", "origin")
+    site = site_en_ligne(remote.strip()) if not code else None
+    if not site:
+        return True
+    fin = time.time() + delai
+    while time.time() < fin:
+        try:
+            if f'"mims-v{version}"' in telecharger(site + "sw.js?guetteur=" + str(int(time.time()))):
+                return True
+        except Exception:
+            pass
+        time.sleep(pas)
+    return False
+
+
 def reglage(nom):
     """Variable d'environnement, sinon celle enregistrée par setx (registre) : une tâche planifiée ne
     voit pas toujours un réglage posé après l'ouverture de session."""
@@ -479,6 +570,8 @@ def chercher(envie, connus, urls_connues, noms_connus, plans):
 def passe(essai=False, plat=None):
     journal = charger_journal()
     maintenant = time.time()
+    url = token = None
+    statuts, ecrits = {}, {}
     if plat:
         envies = [{"nom": plat}]
     else:
@@ -490,20 +583,57 @@ def passe(essai=False, plat=None):
                 journal["_reglages_signales"] = jour
                 sauver_journal(journal)
             return 0
-        envies = envies_du_hub(lire_hub(url, token))
+        etat_hub = lire_hub(url, token)
+        envies = envies_du_hub(etat_hub)
+        ecrits = statuts_du_hub(etat_hub)
+        statuts = statuts_nettoyes(ecrits, envies)
+    v_hub = ((etat_hub.get("guetteur") or {}).get("v") or {}) if not plat else {}
+    passe_hub = v_hub.get("passe") or 0 if isinstance(v_hub, dict) else 0
+    a_suivre = any(isinstance(e, str) or e.get("type") != "ingredient" for e in envies)
+
+    def publier_statuts():
+        """Écrit le suivi sur le hub s'il a changé, ou toutes les 50 min tant qu'il y a des envies de plats
+        (l'app affiche « le PC a regardé tes envies il y a … » et alerte au-delà de 2 h). Jamais en essai
+        ni pour --plat."""
+        nonlocal ecrits, passe_hub
+        if essai or plat:
+            return
+        signe_de_vie = a_suivre and time.time() * 1000 - passe_hub > 50 * 60 * 1000
+        if statuts == ecrits and not signe_de_vie:
+            return
+        try:
+            ecrire_statuts(url, token, statuts)
+            ecrits = json.loads(json.dumps(statuts))
+            passe_hub = time.time() * 1000
+        except Exception as err:
+            log("suivi non écrit sur le hub : " + str(err)[:200])
+
+    def marquer(e, etat, detail="", recette=None):
+        statuts[norm(e["nom"])] = statut(e["nom"], etat, detail, recette, time.time())
+
     recettes = recettes_de_la_base()
+    statuts_retrouves(statuts, envies, recettes, maintenant)
     todo = envies_a_chercher(envies, recettes, {} if plat else journal, maintenant)[:MAX_PAR_PASSE]
     if not todo:
+        publier_statuts()
         return 0
     if not essai:
         motif = preparer_git()
         if motif:
             log("pas de publication : " + motif)
+            for e in todo:
+                marquer(e, "attente", "le PC termine un autre travail, nouvel essai dans 30 min")
+            publier_statuts()
             return 0
         recettes = recettes_de_la_base()            # la base a pu changer avec la mise à jour
+        statuts_retrouves(statuts, envies, recettes, maintenant)
         todo = [e for e in todo if not trouver_recette(e["nom"], recettes)]
         if not todo:
+            publier_statuts()
             return 0
+        for e in todo:
+            marquer(e, "en_cours")
+        publier_statuts()
     log(f"envies à chercher : {', '.join(e['nom'] for e in todo)}")
     plans = {} if all(e.get("url") for e in todo) else {s["id"]: plan_du_site(s) for s in SITES}
     urls_connues, noms_connus = A.deja_dans_les_lots()
@@ -525,6 +655,14 @@ def passe(essai=False, plat=None):
             ajouts.append((e, r))
             urls_connues.add(r["url"].rstrip("/"))
             noms_connus.add(norm(r["nom"]))
+            marquer(e, "en_cours", f"recette trouvée : {r['nom']} ({r['source']}), vérifications puis mise en ligne")
+        elif resultat == "introuvable":
+            marquer(e, "introuvable")
+        elif resultat == "refusee":
+            marquer(e, "refusee", raison_courte(detail))
+        else:
+            marquer(e, "erreur")
+    publier_statuts()
     if essai or not ajouts:
         if not plat:
             sauver_journal(journal)
@@ -553,7 +691,9 @@ def passe(essai=False, plat=None):
         version = monter_version()
         ok, resume_py, sortie_nav = tests()
         if not ok:
-            raise RuntimeError("tests en échec : " + resume_py + " | " + sortie_nav[-600:])
+            # les lignes des tests en échec, pas la fin de la sortie (qui ne montrait que des tests verts)
+            rouges = [l.strip() for l in sortie_nav.splitlines() if l.startswith("ÉCHEC")]
+            raise RuntimeError("tests en échec : " + resume_py + " | " + (" ; ".join(rouges) or sortie_nav[-600:])[:700])
         git("add", *FICHIERS_PUBLIES)
         message = (f"v{version} : envie{'s' if len(ajouts) > 1 else ''} "
                    + ", ".join(f"« {e['nom']} » → {r['nom']}" for e, r in ajouts)
@@ -566,8 +706,15 @@ def passe(essai=False, plat=None):
         code, sortie = git("push", "-q")
         if code:
             log("commit fait mais envoi impossible (rattrapé à la prochaine passe) : " + sortie.strip()[:300])
+            for e, r in ajouts:
+                marquer(e, "attente", f"recette trouvée : {r['nom']}, mise en ligne à la prochaine passe")
         else:
-            log(f"en ligne : v{version}, " + ", ".join(r["nom"] for _, r in ajouts))
+            servie = attendre_en_ligne(version)
+            log(f"en ligne : v{version}, " + ", ".join(r["nom"] for _, r in ajouts)
+                + ("" if servie else " (le site ne la servait pas encore après 6 min)"))
+            for e, r in ajouts:
+                marquer(e, "ajoutee", recette=r["nom"])
+        publier_statuts()
     except Exception as err:
         # rien n'est publié : les fichiers reviennent à leur état d'avant la passe
         for f, contenu in sauvegarde.items():
@@ -580,6 +727,8 @@ def passe(essai=False, plat=None):
         log("ANNULÉ, rien publié : " + str(err)[:800])
         for e, _ in ajouts:
             journal[norm(e["nom"])] = {"dernier": maintenant, "resultat": "erreur", "detail": str(err)[:300]}
+            marquer(e, "erreur", "recette trouvée mais une vérification a échoué")
+        publier_statuts()
         sauver_journal(journal)
         return 1
     sauver_journal(journal)
