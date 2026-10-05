@@ -141,5 +141,72 @@
   "tags": [
    "végé"
   ]
+ },
+ {
+  "nom": "Riz au chorizo",
+  "url": "https://www.marmiton.org/recettes/recette_riz-au-chorizo_14042.aspx",
+  "prep_min": 15,
+  "cuisson_min": 15,
+  "total_min": 30,
+  "parts_origine": 6,
+  "etapes": [
+   "Enlevez la peau du chorizo et le couper en rondelles. Le faire frire et mettre de côté.",
+   "Faire dorer l'oignon, ensuite ajouter les poivrons, les faires bien revenir,",
+   "ajouter le cube et l'eau, puis à ébullition versez le riz.",
+   "Saler légèrement et poivrer. 5 mn avant la fin de la cuisson, ajouter les olives et le chorizo avec un peu d'huile de cuisson."
+  ],
+  "source": "Marmiton",
+  "ingredients": [
+   {
+    "nom": "chorizo",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "poivron vert",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "poivron rouge",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "oignon",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "olives vertes farcies au piment",
+    "qte": 1,
+    "unite": "boîte",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "riz",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "bouillon de volaille",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Épicerie"
+   }
+  ],
+  "cout": "Bon marché",
+  "photo": "https://assets.afcdn.com/recipe/20160621/36748_w1024h1024c1cx1644cy3900cxt0cyt1451cxb3744cyb5616.jpg",
+  "proteine": "porc",
+  "cuissons": [],
+  "cat": "Porc",
+  "saison": "Toute l'année",
+  "tags": [],
+  "kcal_part": 450
  }
 ]
