@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 40;
+  const VERSION_APP = 41;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -808,6 +808,12 @@
     if (!nom) return null;
     const exact = getR(nom);
     if (exact) return exact;
+    // v41 : la recette que le guetteur du PC a associée à cette envie (suivi sur le hub). Sa recherche
+    // élargie peut retenir un titre qui ne contient pas tous les mots écrits : « riz poivrons chorizos »
+    // → « Riz au chorizo » (poivrons dans les ingrédients). Même ordre que recette_liee() de guetteur.py.
+    const g = state.guetteur;
+    const lie = g && typeof g === "object" && g.envies ? g.envies[norm(nom)] : null;
+    if (lie && lie.recette) { const r = getR(lie.recette); if (r) return r; }
     const d = norm(nom).trim();
     if (d.length < 3) return null;
     // 1) le texte demandé tel quel dans le titre : « tendron de veau » → « Tendron de veau
@@ -815,7 +821,8 @@
     let candidats = RECIPES.filter((r) => norm(r.nom).includes(d));
     // 2) à défaut seulement, tous les mots présents mais dans le désordre.
     if (!candidats.length) {
-      const mots = d.split(/\s+/).filter((m) => m.length > 2);
+      // au singulier (v41) : « Escalopes poulets panées » retrouve « Escalopes de poulet panées »
+      const mots = d.split(/\s+/).filter((m) => m.length > 2).map((m) => (m.length > 3 && /[sx]$/.test(m) ? m.slice(0, -1) : m));
       if (!mots.length) return null;
       candidats = RECIPES.filter((r) => { const t = norm(r.nom); return mots.every((m) => t.includes(m)); });
     }
@@ -1529,10 +1536,21 @@
     return `le ${new Date(ms).toLocaleDateString("fr-FR")}`;
   }
   // texte (et classe) du suivi d'une envie de plat ; maj = recette à récupérer par une mise à jour
-  function statutEnvie(nom) {
+  // jour : celui de l'envie. Une recette qui contient un ingrédient exclu n'est jamais tirée au sort : elle
+  // n'arrive au menu qu'imposée sur un jour (v41, le guetteur la propose quand il n'a rien trouvé d'autre).
+  function statutEnvie(nom, jour) {
     const r = trouverRecette(nom);
     const s = suiviEnvie(nom);
-    if (r) return { cls: "ok", txt: s && s.etat === "ajoutee" ? `ajoutée par le PC : ${r.nom}` : `dans ta base : ${r.nom}` };
+    if (r) {
+      let txt = s && s.etat === "ajoutee" ? `ajoutée par le PC : ${r.nom}` : `dans ta base : ${r.nom}`;
+      const ex = ingredientsExclus(r);
+      if (ex.length) {
+        txt += ` · ⚠️ contient ${ex.join(", ")}, normalement exclu${ex.length > 1 ? "s" : ""} · ` + (jour
+          ? `imposée quand même ${JOURS_LONG[JOURS.indexOf(jour)].toLowerCase()}`
+          : "pour l'avoir au menu, ajoute-la de nouveau avec un jour");
+      }
+      return { cls: "ok", txt };
+    }
     if (!s) return { cls: "", txt: "le PC ne l'a pas encore cherchée" };
     const essai = `nouvel essai ${quandEssai(s.prochain)}`;
     switch (s.etat) {
@@ -1610,7 +1628,7 @@
       const s1 = !!(e && typeof e === "object" && rangDe(e) === rangCourant() + 1);
       const meta = ["plat", jour ? `pour ${jourLong(jour)}` : "", s1 ? "semaine prochaine" : "", e && e.url ? "lien fourni" : ""].filter(Boolean).join(" · ");
       // même recherche souple que le menu (trouverRecette) : « Tendron de veau » est bien dans la base
-      h += ligneEnvie(i, nom, meta, statutEnvie(nom));
+      h += ligneEnvie(i, nom, meta, statutEnvie(nom, jour));
     });
     return h + `</div>`;
   }

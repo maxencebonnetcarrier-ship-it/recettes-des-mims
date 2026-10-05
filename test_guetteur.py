@@ -159,6 +159,87 @@ class Choix(unittest.TestCase):
         self.assertIsNone(r)
 
 
+def page_html(url, ingredients, note=4.5, avis=40):
+    """Page de recette minimale (JSON-LD) pour les lectures de pages remplacées dans les tests."""
+    fiche = {"@type": "Recipe", "name": url, "recipeIngredient": ingredients,
+             "aggregateRating": {"ratingValue": note, "reviewCount": avis}}
+    return '<script type="application/ld+json">' + json.dumps(fiche) + "</script>"
+
+
+class Elargir(unittest.TestCase):
+    """Cas réel du 05/10 : « Riz poivrons chorizos » n'avait qu'UNE adresse avec les 3 mots (riz au chorizo,
+    poivrons et ANANAS), refusée, et le guetteur s'arrêtait là."""
+    R = M + "riz-au-chorizo-poivrons-et-ananas_1.aspx"
+    MEX = M + "riz-a-la-mexicaine-au-chorizo_2.aspx"
+    HAR = M + "riz-au-chorizo-et-haricots-rouges_3.aspx"
+    PATES = M + "pates-au-poivron-et-chorizo_4.aspx"
+    PLAN = {"marmiton": [R, MEX, HAR, PATES, M + "chips-de-chorizo_5.aspx", M + "salade-de-riz-et-poivrons_6.aspx"]}
+
+    def setUp(self):
+        self.anciens = (G.telecharger, G.lire_pages, G.PAUSE)
+        G.PAUSE = 0
+
+    def tearDown(self):
+        G.telecharger, G.lire_pages, G.PAUSE = self.anciens
+
+    def test_pluriels_comme_l_app(self):
+        base = [{"nom": "Riz au chorizo, poivrons et ananas"}, {"nom": "Escalopes de poulet panées"}]
+        self.assertEqual(G.trouver_recette("Riz poivrons chorizos", base)["nom"], "Riz au chorizo, poivrons et ananas")
+        self.assertEqual(G.trouver_recette("Escalopes poulets panées", base)["nom"], "Escalopes de poulet panées")
+
+    def test_adresses_a_un_mot_pres(self):
+        c = G.candidats_larges("Riz poivrons chorizos", self.PLAN)
+        urls = [x["url"] for x in c]
+        self.assertNotIn(self.R, urls)                          # les 3 mots : déjà dans la 1re recherche
+        self.assertNotIn(M + "chips-de-chorizo_5.aspx", urls)   # 1 mot sur 3
+        self.assertEqual(set(urls), {self.MEX, self.HAR, self.PATES, M + "salade-de-riz-et-poivrons_6.aspx"})
+        self.assertTrue(urls[0] in (self.MEX, self.HAR))        # le plat de base (« riz ») d'abord
+        self.assertEqual(G.candidats_larges("Gratin ravioles", self.PLAN), [])   # 2 mots : pas d'élargissement
+
+    def test_correspond_par_le_titre_ou_les_ingredients(self):
+        r = {"nom": "Riz à la mexicaine au chorizo", "ingredients": [{"nom": "riz long"}, {"nom": "poivrons verts"}]}
+        self.assertTrue(G.correspond("Riz poivrons chorizos", r))
+        r["ingredients"] = [{"nom": "riz"}, {"nom": "haricots rouges"}]
+        self.assertFalse(G.correspond("Riz poivrons chorizos", r))
+
+    def test_ingredients_de_la_page(self):
+        self.assertEqual(G.ingredients_de_la_page(page_html("x", ["200 g de riz", "1 poivron rouge"])),
+                         ["200 g de riz", "1 poivron rouge"])
+        self.assertEqual(G.ingredients_de_la_page("<html></html>"), [])
+
+    def lectures(self, glaneur):
+        """Pages : riz/chorizo/poivron selon l'adresse ; Glaneur : les recettes données."""
+        ingr = {self.R: ["riz", "chorizo", "poivron", "ananas en cube"], self.MEX: ["riz long", "chorizo", "poivron vert"],
+                self.HAR: ["riz", "chorizo", "haricots rouges"], self.PATES: ["pâtes", "chorizo", "poivron"]}
+        G.telecharger = lambda url: page_html(url, ingr.get(url, []))
+        G.lire_pages = lambda urls: [glaneur[u] for u in urls if u in glaneur]
+
+    def test_essaie_d_autres_recettes(self):
+        self.lectures({self.R: recette_glaneur("Riz au chorizo, poivrons et ananas", self.R, ["riz", "chorizo", "poivron", "ananas en cube"]),
+                       self.MEX: recette_glaneur("Riz à la mexicaine au chorizo", self.MEX, ["riz long", "chorizo", "poivron vert"]),
+                       self.HAR: recette_glaneur("Riz au chorizo et haricots rouges", self.HAR, ["riz", "chorizo", "haricots rouges"])})
+        r, resultat, detail = G.chercher({"nom": "Riz poivrons chorizos"}, {}, set(), set(), self.PLAN)
+        self.assertEqual(resultat, "ajoutee")
+        self.assertEqual(r["url"], self.MEX)                    # contient bien des poivrons ; pas les haricots rouges
+        self.assertFalse(r.get("demande"))
+
+    def test_sinon_propose_la_recette_malgre_les_exclusions(self):
+        self.lectures({self.R: recette_glaneur("Riz au chorizo, poivrons et ananas", self.R, ["riz", "chorizo", "poivron", "ananas en cube"]),
+                       self.HAR: recette_glaneur("Riz au chorizo et haricots rouges", self.HAR, ["riz", "chorizo", "haricots rouges"])})
+        G.telecharger = lambda url: page_html(url, ["riz", "chorizo", "poivron", "ananas en cube"] if url == self.R else ["riz", "chorizo"])
+        r, resultat, detail = G.chercher({"nom": "Riz poivrons chorizos"}, {}, set(), set(), self.PLAN)
+        self.assertEqual((resultat, r["url"]), ("ajoutee", self.R))
+        self.assertTrue(r.get("demande"))                       # acceptée par build_data, signalée par l'app
+        self.assertIn("ananas", detail)
+
+    def test_rien_de_proche_reste_refusee(self):
+        self.lectures({self.R: recette_glaneur("Travers", self.R, ["travers de porc"])})
+        G.telecharger = lambda url: page_html(url, [])
+        r, resultat, _ = G.chercher({"nom": "Riz poivrons chorizos"}, {}, set(), set(), {"marmiton": [self.R]})
+        self.assertIsNone(r)
+        self.assertEqual(resultat, "refusee")
+
+
 class Suivi(unittest.TestCase):
     """Résultat de chaque envie écrit sur le hub (champ « guetteur »), lu par l'app (Mes envies)."""
     BASE = [{"nom": "Tendron de veau printanier"}, {"nom": "Porc caramel"}]

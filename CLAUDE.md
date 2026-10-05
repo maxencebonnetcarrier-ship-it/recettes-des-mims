@@ -41,7 +41,8 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
   site, choix et refus, note des lecteurs, montée de version, lecture du hub (faux hub `test_hub.py`), suivi
   écrit sur le hub.
 - `test_suivi_envies.js` — suivi du guetteur dans Réglages › Mes envies : un état par envie de plat, dernier
-  passage du PC, champ « guetteur » reçu mais JAMAIS renvoyé par le téléphone. Noms de plats FICTIFS exprès :
+  passage du PC, champ « guetteur » reçu mais JAMAIS renvoyé par le téléphone. v41 : envie reliée par le PC à
+  une recette au titre différent (statut et menu), ingrédient exclu signalé, pluriels. Noms de plats FICTIFS exprès :
   un vrai nom finirait par entrer dans la base (ajouté par le guetteur) et le test, devenu rouge, bloquerait
   toute publication du guetteur (constaté le 05/10).
 - `test_envies.js` — envie d'un ingrédient : propositions, plat au menu le jour choisi (ou la semaine
@@ -106,6 +107,19 @@ ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes d
   règles de `ajouter_recette.py` ET dont le titre sera retrouvé par l'épingle du jour. Un lien fourni dans
   l'envie est pris tel quel (« recette demandée ») ; si son titre ne contient pas le nom écrit, la recette
   prend ce nom ;
+- **plusieurs essais** (v41, choix du 05/10 : « faut essayer plusieurs recettes […] sinon mettre qu'il y a des
+  ingrédients à exclure mais proposer la recette ») :
+  1. adresses qui contiennent tous les mots du plat ;
+  2. si aucune ne passe, et pour un nom d'au moins 3 mots, adresses à UN mot près (plat de base en tête
+     d'abord) : au plus 12 pages lues, gardées seulement si le titre ou les ingrédients contiennent tous les
+     mots, la mieux notée d'abord (« riz poivrons chorizos » → « Riz au chorizo », poivrons dans la fiche) ;
+  3. toujours rien : la mieux placée des recettes refusées SEULEMENT pour un ingrédient exclu est ajoutée
+     comme recette demandée (`"demande": true`), le statut dit « contient … ». L'app affiche « ⚠️ contient X,
+     normalement exclu » sous l'envie : une telle recette n'est jamais tirée au sort, elle n'arrive au menu
+     qu'imposée sur un jour.
+  Le titre retenu peut donc différer du nom écrit : le statut `recette` du hub fait le lien
+  (`recette_liee()` du guetteur, `trouverRecette()` de l'app, même ordre : titre exact, recette liée, nom).
+  Les deux comparent les mots au singulier (« Escalopes poulets panées ») ;
 - **ajoute** à `lots/lot6_envies.json`, relève prix et calories, reconstruit `data.js`, monte la version,
   lance TOUS les tests, commite puis pousse. Un test rouge = rien de publié, fichiers remis en l'état ;
 - **ne publie jamais** si le dossier a des modifications en cours (un humain ou un autre outil y travaille) ;

@@ -2,7 +2,10 @@
    Le guetteur du PC écrit sur le hub où en est chaque envie de plat (champ « guetteur ») ; Réglages ›
    Mes envies l'affiche. Le champ est en LECTURE SEULE pour les téléphones : ils ne le renvoient jamais
    (sinon un téléphone en retard effacerait le résultat du PC).
-   ATTENTION : remplace les envies de l'appareil, puis les vide ; la synchro de test est déconnectée. */
+   v41 : une envie que le PC a reliée à une recette au titre différent (recherche élargie) la retrouve, menu
+   compris ; une recette qui contient un ingrédient exclu le dit ; les pluriels retrouvent le titre.
+   ATTENTION : remplace les envies de l'appareil, puis les vide ; la synchro de test est déconnectée. Le menu,
+   les épingles et les exclusions sont remis comme avant. */
 (async function () {
   "use strict";
   const res = { echecs: [], details: {} };
@@ -18,6 +21,8 @@
     document.querySelector('#view-reglages button[data-act="reglages-ouvrir"][data-sec="envies"]').click();
   }
   const fetchVrai = window.fetch;
+  const CHAMPS_REMIS = ["semaine", "suivante", "epingles", "exclusions", "servis"];
+  const avant = Object.fromEntries(CHAMPS_REMIS.map((c) => [c, st[c] === undefined ? undefined : JSON.stringify(st[c])]));
 
   try {
     // noms FICTIFS : un vrai nom de plat finirait par entrer dans la base (ajouté par le guetteur lui-même),
@@ -90,12 +95,53 @@
     const maj = st.guetteur.envies[sansAcc("Plat fictif alpha")];
     if (!maj || maj.etat !== "ajoutee") ech("4. la mise à jour du PC n'est pas reçue");
     if (!/ajoutée/.test(etat("Plat fictif alpha") || "")) ech(`4. l'écran ouvert ne s'est pas mis à jour : « ${etat("Plat fictif alpha")} »`);
+    window.__sync.deconnecter();
+    window.fetch = fetchVrai;
+
+    /* 5. Recette au titre différent de l'envie, reliée par le PC (v41, « riz poivrons chorizos » → « Riz au
+       chorizo ») : l'envie la retrouve, et l'épingle du jour aussi. */
+    const LIEE = "Cordon bleu";
+    if (!window.RECIPES.some((r) => r.nom === LIEE)) ech(`5. précondition : « ${LIEE} » n'est plus dans la base`);
+    st.envies = [{ nom: "Plat fictif golf" }, { nom: "Plat fictif hotel", jour: "Mar" }];
+    st.guetteur = { passe: maintenant - MIN, envies: {
+      [sansAcc("Plat fictif golf")]: S("Plat fictif golf", "ajoutee", { recette: LIEE }),
+      [sansAcc("Plat fictif hotel")]: S("Plat fictif hotel", "ajoutee", { recette: LIEE, detail: "contient chapelure" }),
+    } };
+    st.exclusions = (st.exclusions || []).filter((x) => sansAcc(x) !== "chapelure");
+    ouvrirEnvies();
+    if (!/ajoutée par le PC : Cordon bleu$/.test(etat("Plat fictif golf") || "")) ech(`5. envie reliée : « ${etat("Plat fictif golf")} »`);
+    if (/mettre l'app à jour/.test(etat("Plat fictif golf") || "")) ech("5. recette déjà dans l'app mais mise à jour proposée");
+    if (M.ajoutsEnAttente().length) ech("5. ajouts en attente alors que la recette est dans l'app : " + JSON.stringify(M.ajoutsEnAttente()));
+    M.epingler("Lun", "Plat fictif golf");
+    M.generer();
+    const lun = st.semaine && st.semaine.plan.find((p) => p && p.jour === "Lun");
+    res.details.lundiRelie = lun && lun.nom;
+    if (!lun || lun.nom !== LIEE) ech(`5. l'épingle « Plat fictif golf » ne donne pas ${LIEE} lundi : ${lun && lun.nom}`);
+
+    /* 6. La recette contient un ingrédient exclu (le PC l'a proposée faute de mieux) : l'envie le dit, et dit
+       comment l'avoir au menu, puisqu'une recette exclue n'est jamais tirée au sort. */
+    st.exclusions.push("chapelure");
+    ouvrirEnvies();
+    const g6 = etat("Plat fictif golf") || "", h6 = etat("Plat fictif hotel") || "";
+    res.details.exclue = { golf: g6, hotel: h6 };
+    if (!/contient chapelure, normalement exclu/.test(g6) || !/ajoute-la de nouveau avec un jour/.test(g6)) ech(`6. envie sans jour : « ${g6} »`);
+    if (!/contient chapelure, normalement exclu/.test(h6) || !/imposée quand même mardi/.test(h6)) ech(`6. envie pour mardi : « ${h6} »`);
+    st.exclusions = st.exclusions.filter((x) => x !== "chapelure");
+
+    /* 7. Pluriels : « Escalopes poulets panées » retrouve « Escalopes de poulet panées ». */
+    M.desepingler("Lun");
+    M.epingler("Lun", "Escalopes poulets panées");
+    M.generer();
+    const lun7 = st.semaine && st.semaine.plan.find((p) => p && p.jour === "Lun");
+    res.details.lundiPluriels = lun7 && lun7.nom;
+    if (!lun7 || lun7.nom !== "Escalopes de poulet panées") ech(`7. « Escalopes poulets panées » donne lundi : ${lun7 && lun7.nom}`);
   } catch (e) {
     ech("exception : " + e + " " + (e.stack || "").split("\n")[1]);
   } finally {
     window.fetch = fetchVrai;
     try { window.__sync.deconnecter(); } catch (e) { /* synchro absente */ }
     st.envies = []; st.guetteur = undefined;
+    CHAMPS_REMIS.forEach((c) => { if (avant[c] === undefined) delete st[c]; else st[c] = JSON.parse(avant[c]); });
     M.sauver();
     try { onglet("semaine"); } catch (e) { /* écran absent */ }
   }

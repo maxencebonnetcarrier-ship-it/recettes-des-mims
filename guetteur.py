@@ -49,6 +49,8 @@ PLANS_VALIDITE = 7 * 86400
 RELANCE = {"introuvable": 24 * 3600, "refusee": 24 * 3600, "erreur": 2 * 3600}
 MAX_PAR_PASSE = 3
 MAX_PAGES_LUES = 6
+MAX_PAGES_LARGES = 12   # recherche élargie : pages lues pour vérifier leurs ingrédients
+PAUSE = 1.0             # entre deux pages d'un même site (0 dans les tests)
 SITES = [  # ordre = préférence à égalité ; plans de site déclarés par les sites eux-mêmes
     {"id": "marmiton", "index": "https://www.marmiton.org/wsitemap_recipes_index.xml",
      "fichier": r"wsitemap_recipes_\d+", "recette": r"/recettes/recette_[^/]+\.aspx$"},
@@ -104,13 +106,29 @@ def trouver_recette(nom, recettes):
         return None
     cand = [r for r in recettes if d in norm(r.get("nom"))]
     if not cand:
-        mots = [m for m in re.split(r"\s+", d) if len(m) > 2]
+        # chaque mot au singulier (v41) : « Riz poivrons chorizos » retrouve « Riz au chorizo, poivrons… »
+        mots = [singulier(m) for m in re.split(r"\s+", d) if len(m) > 2]
         if not mots:
             return None
         cand = [r for r in recettes if all(m in norm(r.get("nom")) for m in mots)]
     if not cand:
         return None
     return sorted(cand, key=lambda r: len(r["nom"]))[0]
+
+
+def recette_liee(nom, recettes, statuts=None):
+    """La recette d'une envie : son titre exact, sinon celle que le guetteur lui a ASSOCIÉE (statut
+    « recette » sur le hub : recherche élargie, titre de la page différent du nom écrit), sinon par le nom.
+    Même ordre que trouverRecette() d'app.js."""
+    for r in recettes:
+        if r.get("nom") == nom:
+            return r
+    s = (statuts or {}).get(norm(nom))
+    if s and s.get("recette"):
+        lie = next((r for r in recettes if r.get("nom") == s["recette"]), None)
+        if lie:
+            return lie
+    return trouver_recette(nom, recettes)
 
 
 # ---------- envies ----------
@@ -125,7 +143,7 @@ def envies_du_hub(state):
     return out
 
 
-def envies_a_chercher(envies, recettes, journal, maintenant):
+def envies_a_chercher(envies, recettes, journal, maintenant, statuts=None):
     """Plats demandés, absents de la base, pas déjà tentés trop récemment."""
     todo, vus = [], set()
     for e in envies:
@@ -135,7 +153,7 @@ def envies_a_chercher(envies, recettes, journal, maintenant):
         if not nom or e.get("type") == "ingredient" or norm(nom) in vus:
             continue
         vus.add(norm(nom))
-        if trouver_recette(nom, recettes):
+        if recette_liee(nom, recettes, statuts):
             continue
         j = journal.get(norm(nom))
         if j and maintenant - j.get("dernier", 0) < RELANCE.get(j.get("resultat"), 0):
@@ -144,7 +162,7 @@ def envies_a_chercher(envies, recettes, journal, maintenant):
     return todo
 
 
-def etat_envies(envies, recettes, journal, maintenant):
+def etat_envies(envies, recettes, journal, maintenant, statuts=None):
     """Pour l'aperçu (raccourci « Guetteur des Mim's ») : chaque envie et ce que le guetteur en fera.
     Rend [(libellé, statut, à_chercher)]."""
     out, vus = [], set()
@@ -159,7 +177,7 @@ def etat_envies(envies, recettes, journal, maintenant):
         if e.get("type") == "ingredient":
             out.append((lib, "ingrédient : l'app choisit elle-même un plat de ta base qui en contient", False))
             continue
-        r = trouver_recette(nom, recettes)
+        r = recette_liee(nom, recettes, statuts)
         if r:
             out.append((lib, f"déjà dans ta base : {r['nom']}", False))
             continue
@@ -205,7 +223,7 @@ def statuts_retrouves(statuts, envies, recettes, maintenant):
     for e in envies:
         nom = e["nom"] if isinstance(e, dict) else e
         s = statuts.get(norm(nom))
-        r = trouver_recette(nom, recettes)
+        r = recette_liee(nom, recettes, statuts)
         if s and r and s.get("etat") != "ajoutee":
             statuts[norm(nom)] = statut(s.get("nom") or nom, "ajoutee", recette=r["nom"], maintenant=maintenant)
 
@@ -357,6 +375,83 @@ def candidats(nom, plans):
     return sorted(out, key=lambda c: (c["en_trop"], c["site"], len(c["url"])))
 
 
+def candidats_larges(nom, plans):
+    """Recherche ÉLARGIE (v41) : adresses qui contiennent tous les mots du plat SAUF UN, pour un nom d'au moins
+    3 mots. Cas du 05/10 : « Riz poivrons chorizos » n'avait qu'une adresse avec les 3 mots (« riz au chorizo,
+    poivrons et ananas », refusée) et 24 avec « riz » et « chorizo ». Le plat de base (1er mot demandé) en tête
+    de l'adresse passe devant. Le mot manquant devra être dans les ingrédients (voir classer_larges)."""
+    voulus = list(dict.fromkeys(mots_utiles(nom)))
+    if len(voulus) < 3:
+        return []
+    out = []
+    for rang_site, site in enumerate(SITES):
+        for url in plans.get(site["id"], []):
+            m = mots_adresse(url)
+            communs = set(voulus) & set(m)
+            if len(communs) == len(voulus) - 1:
+                out.append({"url": url, "en_trop": len(set(m) - set(voulus)), "site": rang_site,
+                            "tete": bool(m) and m[0] == voulus[0]})
+    return sorted(out, key=lambda c: (not c["tete"], c["en_trop"], c["site"], len(c["url"])))
+
+
+def fiche_de_la_page(html):
+    """Le bloc JSON-LD de type Recipe de la page, ou {}."""
+    for bloc in re.findall(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', html, re.S):
+        try:
+            d = json.loads(bloc)
+        except ValueError:
+            continue
+        pile = [d]
+        while pile:
+            x = pile.pop()
+            if isinstance(x, list):
+                pile += x
+            elif isinstance(x, dict):
+                t = x.get("@type")
+                if t == "Recipe" or (isinstance(t, list) and "Recipe" in t) or "recipeIngredient" in x:
+                    return x
+                pile += list(x.values())
+    return {}
+
+
+def ingredients_de_la_page(html):
+    v = fiche_de_la_page(html).get("recipeIngredient") or []
+    return [str(i) for i in v] if isinstance(v, list) else []
+
+
+def mots_manquants(nom, r):
+    """Mots du plat demandé absents du titre ET des ingrédients de la recette (au singulier ; un mot compte
+    aussi s'il commence un mot de la recette : « caramel » dans « caramélisé »)."""
+    texte = " ".join([r.get("nom") or ""] + [str(i.get("nom") or "") for i in r.get("ingredients") or []])
+    present = set(mots_utiles(texte))
+    return [m for m in dict.fromkeys(mots_utiles(nom))
+            if m not in present and not any(len(m) >= 4 and t.startswith(m) for t in present)]
+
+
+def correspond(nom, r):
+    """La recette est-elle bien le plat demandé ? Tous ses mots dans le titre ou les ingrédients."""
+    return not mots_manquants(nom, r)
+
+
+def classer_larges(nom, cands, pause=None):
+    """Lit les pages de la recherche élargie (au plus MAX_PAGES_LARGES, une par seconde) et ne garde que celles
+    dont le titre ou les ingrédients contiennent TOUS les mots du plat, la mieux notée d'abord."""
+    pause = PAUSE if pause is None else pause
+    gardes = []
+    for i, c in enumerate(cands[:MAX_PAGES_LARGES]):
+        if i and pause:
+            time.sleep(pause)
+        try:
+            html = telecharger(c["url"])
+        except Exception:
+            continue
+        fiche = {"nom": " ".join(mots_adresse(c["url"])), "ingredients": [{"nom": x} for x in ingredients_de_la_page(html)]}
+        if correspond(nom, fiche):
+            c["note"], c["avis"] = note_de_la_page(html)
+            gardes.append(c)
+    return sorted(gardes, key=lambda c: (-score(c["note"], c["avis"]), c["en_trop"]))[:MAX_PAGES_LUES]
+
+
 def note_de_la_page(html):
     """Note des lecteurs (JSON-LD aggregateRating) : (valeur, nombre d'avis), ou (None, 0)."""
     for bloc in re.findall(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', html, re.S):
@@ -387,15 +482,16 @@ def score(valeur, avis):
     return (valeur or 0) * (1 - math.exp(-(avis or 0) / 15))
 
 
-def classer_par_note(cands, pause=1.0):
+def classer_par_note(cands, pause=None):
     """Parmi les adresses les plus proches du nom (au plus 1 mot de plus que la meilleure), la mieux notée
     d'abord. Lit au plus MAX_PAGES_LUES pages, une par seconde."""
     if not cands:
         return []
+    pause = PAUSE if pause is None else pause
     meilleur = cands[0]["en_trop"]
     proches = [c for c in cands if c["en_trop"] <= meilleur + 1][:MAX_PAGES_LUES]
     for i, c in enumerate(proches):
-        if i:
+        if i and pause:
             time.sleep(pause)
         try:
             c["note"], c["avis"] = note_de_la_page(telecharger(c["url"]))
@@ -423,16 +519,22 @@ def lire_pages(urls):
         raise RuntimeError(str(e))
 
 
-def choisir_parmi(nom, lues, connus, urls_connues, noms_connus, demande=False):
-    """Première recette lue qui respecte les règles de l'app ET que l'envie retrouvera par son nom.
-    Rend (recette au format des lots ou None, raisons des refus)."""
+def choisir_parmi(nom, lues, connus, urls_connues, noms_connus, demande=False, exclues=None):
+    """Première recette lue qui respecte les règles de l'app ET qui est bien le plat demandé (tous ses mots
+    dans le titre ou les ingrédients). Rend (recette au format des lots ou None, raisons des refus).
+    `exclues` (liste) reçoit les fiches refusées SEULEMENT pour un ingrédient exclu : repli de chercher()."""
     refus = []
     for g in lues:
         r, _, raison = A.completer(g, connus, demande=demande)
-        if not raison and (r["url"].rstrip("/") in urls_connues or norm(r["nom"]) in noms_connus):
+        doublon = r["url"].rstrip("/") in urls_connues or norm(r["nom"]) in noms_connus
+        manque = [] if demande else mots_manquants(nom, r)
+        if not raison and doublon:
             raison = "déjà dans les lots"
-        if not raison and not demande and not trouver_recette(nom, [r]):
-            raison = f"titre « {r['nom']} » : l'envie « {nom} » ne le retrouverait pas"
+        if not raison and manque:
+            raison = f"titre « {r['nom']} » : ni le titre ni les ingrédients ne contiennent « {', '.join(manque)} »"
+        if (exclues is not None and raison and raison.startswith("contient un ingrédient exclu")
+                and not doublon and not manque):
+            exclues.append(g)
         if raison:
             refus.append(f"{r['nom']} ({r['url']}) : {raison}")
             continue
@@ -551,20 +653,48 @@ def chercher(envie, connus, urls_connues, noms_connus, plans):
             if norm(nom) in noms_connus:
                 return None, "refusee", f"une autre recette s'appelle déjà « {nom} »"
             log(f"« {nom} » : titre de la page « {r['nom']} » remplacé par le nom de l'envie")
-            r["nom"] = nom
+            r["nom"] = A.nettoyer_nom(nom)
         return r, "ajoutee", r["url"]
+    exclues, tous_refus = [], []
+    # 1) adresses avec TOUS les mots du plat
     cands = candidats(nom, plans)
-    if not cands:
+    if cands:
+        classes = classer_par_note(cands)
+        log(f"« {nom} » : {len(cands)} adresse(s), lues : " + ", ".join(
+            f"{c['url']} ({c['note'] or '—'}/{c['avis']})" for c in classes))
+        r, refus = choisir_parmi(nom, lire_pages([c["url"] for c in classes]), connus, urls_connues, noms_connus,
+                                 exclues=exclues)
+        for x in refus:
+            log("  refusée : " + x)
+        tous_refus += refus
+        if r:
+            return r, "ajoutee", r["url"]
+    # 2) rien ne convient : adresses à un mot près, si la fiche contient quand même tous les mots
+    larges = candidats_larges(nom, plans)
+    if larges:
+        classes = classer_larges(nom, larges)
+        log(f"« {nom} » : recherche élargie, {len(larges)} adresse(s) à un mot près, {len(classes)} avec tous les "
+            "mots dans la fiche : " + ", ".join(f"{c['url']} ({c['note'] or '—'}/{c['avis']})" for c in classes))
+        if classes:
+            r, refus = choisir_parmi(nom, lire_pages([c["url"] for c in classes]), connus, urls_connues,
+                                     noms_connus, exclues=exclues)
+            for x in refus:
+                log("  refusée : " + x)
+            tous_refus += refus
+            if r:
+                return r, "ajoutee", r["url"]
+    # 3) toujours rien : la mieux placée des recettes refusées SEULEMENT pour un ingrédient exclu est
+    #    proposée quand même, comme une recette demandée. L'app signale l'ingrédient (choix du 05/10).
+    for g in exclues:
+        r, _, raison = A.completer(g, connus, demande=True)
+        if raison:
+            continue
+        detail = "contient " + ", ".join(A.exclus_par_defaut(r)) + " : proposée quand même, l'app le signale"
+        log(f"« {nom} » : aucune recette sans ingrédient exclu, {r['nom']} proposée ({detail})")
+        return r, "ajoutee", detail
+    if not cands and not larges:
         return None, "introuvable", "aucune recette de ce nom dans les plans de site"
-    classes = classer_par_note(cands)
-    log(f"« {nom} » : {len(cands)} adresse(s), lues : " + ", ".join(
-        f"{c['url']} ({c['note'] or '—'}/{c['avis']})" for c in classes))
-    r, refus = choisir_parmi(nom, lire_pages([c["url"] for c in classes]), connus, urls_connues, noms_connus)
-    for x in refus:
-        log("  refusée : " + x)
-    if r:
-        return r, "ajoutee", r["url"]
-    return None, "refusee", "; ".join(refus)[:500] or "aucune page lisible"
+    return None, "refusee", "; ".join(tous_refus)[:500] or "aucune page lisible"
 
 
 def passe(essai=False, plat=None):
@@ -613,7 +743,7 @@ def passe(essai=False, plat=None):
 
     recettes = recettes_de_la_base()
     statuts_retrouves(statuts, envies, recettes, maintenant)
-    todo = envies_a_chercher(envies, recettes, {} if plat else journal, maintenant)[:MAX_PAR_PASSE]
+    todo = envies_a_chercher(envies, recettes, {} if plat else journal, maintenant, statuts)[:MAX_PAR_PASSE]
     if not todo:
         publier_statuts()
         return 0
@@ -627,7 +757,7 @@ def passe(essai=False, plat=None):
             return 0
         recettes = recettes_de_la_base()            # la base a pu changer avec la mise à jour
         statuts_retrouves(statuts, envies, recettes, maintenant)
-        todo = [e for e in todo if not trouver_recette(e["nom"], recettes)]
+        todo = [e for e in todo if not recette_liee(e["nom"], recettes, statuts)]
         if not todo:
             publier_statuts()
             return 0
@@ -686,8 +816,11 @@ def passe(essai=False, plat=None):
             raise RuntimeError("build_data.py refuse une recette : " + sortie[-400:])
         base = recettes_de_la_base()
         for e, r in ajouts:
-            if not trouver_recette(e["nom"], base):
-                raise RuntimeError(f"« {e['nom']} » ne retrouve pas la recette ajoutée dans data.js")
+            # le nom EXACT dans data.js : c'est lui que l'app associe à l'envie (statut « recette »)
+            x = next((b for b in base if norm(b.get("nom")) == norm(r["nom"])), None)
+            if not x:
+                raise RuntimeError(f"« {r['nom']} » absente de data.js après reconstruction")
+            r["nom"] = x["nom"]
         version = monter_version()
         ok, resume_py, sortie_nav = tests()
         if not ok:
@@ -707,13 +840,15 @@ def passe(essai=False, plat=None):
         if code:
             log("commit fait mais envoi impossible (rattrapé à la prochaine passe) : " + sortie.strip()[:300])
             for e, r in ajouts:
-                marquer(e, "attente", f"recette trouvée : {r['nom']}, mise en ligne à la prochaine passe")
+                marquer(e, "attente", f"recette trouvée : {r['nom']}, mise en ligne à la prochaine passe",
+                        recette=r["nom"])
         else:
             servie = attendre_en_ligne(version)
             log(f"en ligne : v{version}, " + ", ".join(r["nom"] for _, r in ajouts)
                 + ("" if servie else " (le site ne la servait pas encore après 6 min)"))
             for e, r in ajouts:
-                marquer(e, "ajoutee", recette=r["nom"])
+                ex = A.exclus_par_defaut(r)
+                marquer(e, "ajoutee", ("contient " + ", ".join(ex)) if ex else "", recette=r["nom"])
         publier_statuts()
     except Exception as err:
         # rien n'est publié : les fichiers reviennent à leur état d'avant la passe
@@ -742,12 +877,13 @@ def apercu():
     if not url or not token:
         print("Réglages manquants : MIMS_HUB_URL et MIMS_HUB_TOKEN.")
         return 2
-    envies = envies_du_hub(lire_hub(url, token))
+    etat_hub = lire_hub(url, token)
+    envies = envies_du_hub(etat_hub)
     if not envies:
         print("Aucune envie sur le partage. Note-les sur le téléphone (Réglages › Mes envies), avec « Partage à deux »"
               " activé : sinon elles restent sur le téléphone.")
         return 3
-    lignes = etat_envies(envies, recettes_de_la_base(), charger_journal(), time.time())
+    lignes = etat_envies(envies, recettes_de_la_base(), charger_journal(), time.time(), statuts_du_hub(etat_hub))
     print(f"{len(lignes)} envie(s) sur le partage :")
     for lib, statut, _ in lignes:
         print(f"  • {lib} — {statut}")
