@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 import urllib.request
 
@@ -19,6 +20,7 @@ sys.path.insert(0, ICI)
 # journal et plans de site du test dans un dossier jetable : jamais dans le vrai journal du guetteur
 os.environ["MIMS_GUETTEUR_DONNEES"] = tempfile.mkdtemp(prefix="mims-guetteur-test-")
 import guetteur as G  # noqa: E402
+A = G.A  # ajouter_recette, tel que le guetteur l'utilise
 
 M = "https://www.marmiton.org/recettes/recette_"
 
@@ -135,6 +137,9 @@ class Choix(unittest.TestCase):
         self.assertEqual(G.A.nettoyer_nom("gratin de ravioles et courgettes"), "Gratin de ravioles et courgettes")
         self.assertEqual(G.A.nettoyer_nom("Porc au caramel : la meilleure recette"), "Porc au caramel")
         self.assertEqual(G.A.nettoyer_nom("Émincés de poulet sauce moutarde"), "Émincés de poulet sauce moutarde")
+        # cas réels du 07/10 (enrichissement de la base)
+        self.assertEqual(G.A.nettoyer_nom("Gigot de 7 heures : la recette incontournable"), "Gigot de 7 heures")
+        self.assertEqual(G.A.nettoyer_nom("Chili con carne de Marmiton"), "Chili con carne")
         # le nom nettoyé est toujours retrouvé par l'envie écrite sur le téléphone
         self.assertIsNotNone(G.trouver_recette("Gratin ravioles", [{"nom": "Gratin de ravioles et courgettes"}]))
 
@@ -187,6 +192,16 @@ class Elargir(unittest.TestCase):
         self.assertEqual(G.trouver_recette("Riz poivrons chorizos", base)["nom"], "Riz au chorizo, poivrons et ananas")
         self.assertEqual(G.trouver_recette("Escalopes poulets panées", base)["nom"], "Escalopes de poulet panées")
 
+    def test_mots_dans_le_desordre_un_dans_les_ingredients(self):
+        # v43, cas du 07/10 : « Riz chorizo poivrons » imposé jeudi, « Riz au chorizo » (poivrons) dans la base
+        base = [{"nom": "Riz au chorizo", "ingredients": [{"nom": "chorizo"}, {"nom": "poivron rouge"}, {"nom": "riz"}]},
+                {"nom": "Paella", "ingredients": [{"nom": "riz"}, {"nom": "chorizo"}, {"nom": "poivron"}]}]
+        self.assertEqual(G.trouver_recette("Riz chorizo poivrons", base)["nom"], "Riz au chorizo")
+        self.assertEqual(G.recette_liee("Riz chorizo poivrons", base)["nom"], "Riz au chorizo")
+        self.assertIsNone(G.trouver_recette("Riz poivrons", base))            # 2 mots : pas d'élargissement
+        self.assertIsNone(G.trouver_recette("Riz chorizo courgettes", base))  # mot manquant absent des ingrédients
+        self.assertIsNone(G.trouver_recette("Riz courgettes aubergines", base))  # deux mots manquants
+
     def test_adresses_a_un_mot_pres(self):
         c = G.candidats_larges("Riz poivrons chorizos", self.PLAN)
         urls = [x["url"] for x in c]
@@ -238,6 +253,33 @@ class Elargir(unittest.TestCase):
         r, resultat, _ = G.chercher({"nom": "Riz poivrons chorizos"}, {}, set(), set(), {"marmiton": [self.R]})
         self.assertIsNone(r)
         self.assertEqual(resultat, "refusee")
+
+
+class SansConsole(unittest.TestCase):
+    """pythonw (tâche planifiée) : sys.stdout et sys.stderr valent None. Avant la v43, la lecture Glaneur
+    écrivait dans sys.stderr et la passe plantait (« 'NoneType' object has no attribute 'write' »)."""
+
+    def setUp(self):
+        self.flux = (sys.stdout, sys.stderr)
+        self.run, self.cmd = A.subprocess.run, A.commande_glaneur
+
+    def tearDown(self):
+        sys.stdout, sys.stderr = self.flux
+        A.subprocess.run, A.commande_glaneur = self.run, self.cmd
+
+    def test_lecture_glaneur_sans_console(self):
+        vus = {}
+
+        def faux_run(cmd, **kw):
+            vus.update(kw)
+            return types.SimpleNamespace(returncode=0, stdout='[{"nom": "x"}]', stderr="[1/1] 200 1 ingrédient\n")
+        A.subprocess.run = faux_run
+        A.commande_glaneur = lambda: ["glaneur"]
+        sys.stdout, sys.stderr = None, None
+        G.sans_console()
+        self.assertEqual(A.lire_avec_glaneur(["https://www.marmiton.org/x.aspx"]), [{"nom": "x"}])
+        if os.name == "nt":
+            self.assertEqual(vus.get("creationflags"), 0x08000000)  # node sans fenêtre
 
 
 class Suivi(unittest.TestCase):

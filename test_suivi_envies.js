@@ -135,6 +135,18 @@
     const lun7 = st.semaine && st.semaine.plan.find((p) => p && p.jour === "Lun");
     res.details.lundiPluriels = lun7 && lun7.nom;
     if (!lun7 || lun7.nom !== "Escalopes de poulet panées") ech(`7. « Escalopes poulets panées » donne lundi : ${lun7 && lun7.nom}`);
+
+    /* 8. Mots dans un autre ordre, l'un d'eux seulement dans les ingrédients (v43, cas du 07/10 : « Riz chorizo
+       poivrons » imposé jeudi restait en attente alors que « Riz au chorizo », avec des poivrons, est dans la base). */
+    st.guetteur = undefined;
+    const riz = window.RECIPES.find((r) => r.nom === "Riz au chorizo");
+    if (!riz || !riz.ingredients.some((i) => /poivron/i.test(i.nom))) ech("8. précondition : « Riz au chorizo » avec poivrons absent de la base");
+    M.desepingler("Lun");
+    M.epingler("Lun", "Riz chorizo poivrons");
+    M.generer();
+    const lun8 = st.semaine && st.semaine.plan.find((p) => p && p.jour === "Lun");
+    res.details.lundiDesordre = lun8 && lun8.nom;
+    if (!lun8 || lun8.nom !== "Riz au chorizo" || !lun8.epingle) ech(`8. « Riz chorizo poivrons » donne lundi : ${lun8 && lun8.nom}`);
   } catch (e) {
     ech("exception : " + e + " " + (e.stack || "").split("\n")[1]);
   } finally {

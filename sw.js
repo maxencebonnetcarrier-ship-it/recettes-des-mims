@@ -1,6 +1,6 @@
 /* Service worker — rend l'app utilisable hors-ligne une fois ouverte.
    Stratégie : réseau d'abord (pour recevoir les mises à jour), cache en secours. */
-const CACHE = "mims-v42";
+const CACHE = "mims-v43";
 const FICHIERS = [
   "./",
   "./index.html",

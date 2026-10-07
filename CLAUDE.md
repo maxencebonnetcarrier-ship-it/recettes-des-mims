@@ -95,6 +95,13 @@ La règle des 3 sites reste entière pour les recettes que Claude cherche de sa 
 `test_ajouter_recette.py` (sans réseau) vérifie la complétion, les refus et l'écriture du lot.
 Usage permis : une recette à la fois, à la demande. Les conditions de Marmiton, du Journal des Femmes et de
 Saveurs interdisent d'aspirer leur site entier pour le republier, ce que ferait ce dépôt public.
+`lots/lot7_enrichissement.json` (07/10, demande « scrap moi beaucoup plus de recettes […] dans toutes les
+catégories ») : un ajout BORNÉ, pas une aspiration. Par catégorie du cadre, au plus 70 pages lues dans les plans
+de site (plus anciennes fiches d'abord, noms rapides d'abord pour les jours limités en durée). On n'a gardé que
+les fiches notées au moins 4,2 sur 5 avis et plus, dans la durée du jour, qui passent les règles de
+`ajouter_recette.py` et ne sont pas une variante d'un plat déjà en base. Relues à la main ensuite : entrées
+(citrons farcis, pain de thon, flan…), charcuterie, gibier et omelettes en trop retirés. Bilan : 66 recettes,
+base 73 → 139 (Volaille 10, Porc 9, Poisson 11, Légumineuses 12, Express 8, Mijoté 8, Rôti 8), toutes Marmiton.
 
 ### Guetteur des envies (`guetteur.py`, 2026-10-04)
 Choix de l'utilisateur : « il lit mes envies du téléphone, cherche la recette par son nom, l'ajoute et met en
@@ -119,10 +126,15 @@ ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes d
      qu'imposée sur un jour.
   Le titre retenu peut donc différer du nom écrit : le statut `recette` du hub fait le lien
   (`recette_liee()` du guetteur, `trouverRecette()` de l'app, même ordre : titre exact, recette liée, nom).
-  Les deux comparent les mots au singulier (« Escalopes poulets panées ») ;
+  Les deux comparent les mots au singulier (« Escalopes poulets panées »). Pour un nom d'au moins 3 mots, ils
+  acceptent aussi un titre à UN mot près si ce mot est dans les ingrédients (v43 : « Riz chorizo poivrons » →
+  « Riz au chorizo ») ;
 - **ajoute** à `lots/lot6_envies.json`, relève prix et calories, reconstruit `data.js`, monte la version,
   lance TOUS les tests, commite puis pousse. Un test rouge = rien de publié, fichiers remis en l'état ;
 - **ne publie jamais** si le dossier a des modifications en cours (un humain ou un autre outil y travaille) ;
+- **lancé par pythonw, sans console** : `sans_console()` envoie les sorties dans le vide. Avant la v43, la
+  lecture Glaneur écrivait dans `sys.stderr` (`None`) et chaque passe planta les 06 et 07/10. Glaneur tourne
+  sans fenêtre ;
 - un plat introuvable ou refusé est retenté 24 h plus tard. Journal, plans et log :
   `%LOCALAPPDATA%\mims-guetteur` ;
 - **écrit où en est chaque envie** sur le hub (v38), champ `guetteur` : `{ passe, envies: { nom normalisé :
@@ -161,9 +173,10 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
 ## Règles métier
 - **Jours** : Lun Volaille · Mar Légumineuses · Mer Porc · Jeu Poisson · Ven Express (retour du sport)
   · Sam Mijoté · Dim Mijoté ou Rôti.
-- **Anti-répétition par PROTÉINE** (et non par nom de recette) : jamais la même protéine deux jours
-  consécutifs, et pas plus de 2 fois dans la semaine. C'est la règle qui empêche « bavette / bourguignon /
-  rôti de bœuf » trois soirs de suite.
+- **Anti-répétition par PROTÉINE** (et non par nom de recette) : pas plus de 2 fois dans la semaine. C'est la
+  règle qui empêche « bavette / bourguignon / rôti de bœuf » trois soirs de suite. Deux jours de suite avec la
+  même protéine sont PERMIS, sans avertissement (v43, choix du 07/10 : « on s'en fiche 2 jours de suite poisson
+  par exemple, pas besoin d'alerter »).
 - Pas deux fois la même recette sur 3 semaines. Le dernier menu affiché d'une semaine terminée compte
   d'office (champ `servis`, partagé par la synchro) : la règle ne dépend pas de « Marquer fait ».
   L'historique « Marquer fait » compte aussi, mais n'est jamais rempli automatiquement.
@@ -189,7 +202,8 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
     - `sucre_sale()` refuse un plat (ou un accompagnement) qui contient du miel, un sirop, une confiture, un
       chutney, du pain d'épices ou un fruit sucré (pomme, ananas, pruneau, abricot, orange…) ;
     - le **caramel et le sucre seul restent permis** (choix de l'utilisateur) ;
-    - ne comptent pas : citron, coco, cidre, vinaigres, huiles, zeste, pomme de terre, poivron orange.
+    - ne comptent pas : citron, coco, cidre, vinaigres, huiles, zeste, pomme de terre, poivron orange, tomates
+      cerises (v43 : refusées à tort pour le mot « cerise » ; la règle de la tomate crue s'applique).
     - Vérifié sur Marmiton : « Escalopes de dinde au caramel » acceptée ; « Poulet soy mielleux », dinde à
       l'ananas, wrap à la pomme refusés.
 

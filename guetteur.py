@@ -105,12 +105,20 @@ def trouver_recette(nom, recettes):
     if len(d) < 3:
         return None
     cand = [r for r in recettes if d in norm(r.get("nom"))]
+    # chaque mot au singulier (v41) : « Riz poivrons chorizos » retrouve « Riz au chorizo, poivrons… »
+    mots = [singulier(m) for m in re.split(r"\s+", d) if len(m) > 2]
     if not cand:
-        # chaque mot au singulier (v41) : « Riz poivrons chorizos » retrouve « Riz au chorizo, poivrons… »
-        mots = [singulier(m) for m in re.split(r"\s+", d) if len(m) > 2]
         if not mots:
             return None
         cand = [r for r in recettes if all(m in norm(r.get("nom")) for m in mots)]
+    if not cand and len(mots) >= 3:
+        # à un mot près, le mot manquant dans les ingrédients (v43) : « Riz chorizo poivrons » → « Riz au
+        # chorizo », poivrons dans la fiche. Même règle que la recherche élargie, et que trouverRecette() d'app.js.
+        def a_un_mot_pres(r):
+            t = norm(r.get("nom"))
+            manque = [m for m in mots if m not in t]
+            return len(manque) == 1 and any(manque[0] in norm(i.get("nom")) for i in r.get("ingredients") or [])
+        cand = [r for r in recettes if a_un_mot_pres(r)]
     if not cand:
         return None
     return sorted(cand, key=lambda r: len(r["nom"]))[0]
@@ -890,7 +898,17 @@ def apercu():
     return 0 if any(x[2] for x in lignes) else 3
 
 
+def sans_console():
+    """pythonw (la tâche planifiée) n'a pas de console : sys.stdout et sys.stderr valent None, et le premier
+    write() faisait planter la passe (« 'NoneType' object has no attribute 'write' », 06 et 07/10 : aucune page
+    lue depuis la v41). Les sorties partent alors dans le vide ; le journal guetteur.log reste écrit."""
+    for nom in ("stdout", "stderr"):
+        if getattr(sys, nom) is None:
+            setattr(sys, nom, open(os.devnull, "w", encoding="utf-8", newline=""))
+
+
 def main():
+    sans_console()
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--essai", action="store_true", help="chercher et afficher, sans rien écrire ni publier")
     ap.add_argument("--plat", help="chercher ce plat au lieu de lire les envies du hub")

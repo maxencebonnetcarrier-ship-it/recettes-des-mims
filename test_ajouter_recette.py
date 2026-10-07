@@ -113,6 +113,9 @@ for salé in ("pommes de terre", "cidre bouché brut", "vinaigre de framboise", 
              "eau de fleur d'oranger", "huile de pépins de raisin"):
     g = dict(GLANEUR, ingredients=GLANEUR["ingredients"] + ingr(salé))
     verifie(A.completer(g, {})[2] is None, f"5 bis. « {salé} » pris à tort pour du sucré-salé")
+from build_data import sucre_sale
+verifie(sucre_sale(ingr("tomates cerises", "tomate cerise")) == [], "5 bis. « tomates cerises » pris pour du sucré-salé (cerise)")
+verifie(sucre_sale(ingr("cerises")) == ["cerises"], "5 bis. de vraies cerises ne sont plus vues comme sucrées")
 r_dem, _, refus_dem = A.completer(dict(GLANEUR, ingredients=GLANEUR["ingredients"] + ingr("miel")), {}, demande=True)
 verifie(refus_dem is None, "5 bis. une recette demandée sucrée-salée doit passer, comme les autres exclusions")
 

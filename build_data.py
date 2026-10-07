@@ -82,7 +82,8 @@ FRUITS_SUCRES = ["pomme", "poire", "ananas", "mangue", "abricot", "pruneau", "ra
                  "nectarine", "banane", "cerise", "fraise", "framboise", "myrtille", "mûre", "cassis", "groseille",
                  "canneberge", "cranberry", "cranberries", "airelle", "litchi", "grenade", "coing", "kiwi", "melon",
                  "pastèque", "rhubarbe", "clémentine", "mandarine", "orange", "pamplemousse", "fruit sec", "fruits secs"]
-PAS_SUCRES = ["pomme de terre", "vinaigre", "cidre", "zeste", "huile", "fleur d'oranger", "poivron"]
+# « tomates cerises » : une tomate, pas une cerise (refus à tort constaté le 07/10) ; la règle tomate crue s'applique
+PAS_SUCRES = ["pomme de terre", "vinaigre", "cidre", "zeste", "huile", "fleur d'oranger", "poivron", "tomate"]
 
 
 def _mots(s):
@@ -165,6 +166,8 @@ _MENTIONS = [
     "simple et rapide", "succulente et rapide", "tout simple et parfume",
     "tout simple", "pour les nuls", "inratable", "succulente", "express",
     "facile", "parfaite", "parfait", "originale", "simple",
+    # 07/10 : « Gigot de 7 heures : la recette incontournable », « Chili con carne de Marmiton »
+    "incontournable", "de marmiton",
 ]
 
 

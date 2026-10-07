@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 42;
+  const VERSION_APP = 43;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -312,12 +312,11 @@
     return null;
   }
 
-  /* Choisit une recette en évitant : la protéine des jours adjacents (règle dure),
-     la même protéine plus de 2x dans la semaine, et une saveur déjà utilisée.
+  /* Choisit une recette en évitant la même protéine plus de 2x dans la semaine, et une saveur déjà utilisée.
+     Deux jours de suite avec la même protéine sont permis (v43, choix du 07/10 : « on s'en fiche 2 jours de
+     suite poisson par exemple, pas besoin d'alerter ») : le quota de 2 par semaine reste.
      `garder` (facultatif) ne retient que certaines recettes : envie d'un ingrédient (v36). */
   function choisir(cadre, interdites, plan, idx, garder) {
-    const protPrec = idx > 0 && plan[idx - 1] ? plan[idx - 1].proteine : null;
-    const protSuiv = plan[idx + 1] ? plan[idx + 1].proteine : null;
     const compteProt = {};
     plan.forEach((p, i) => { if (p && i !== idx) compteProt[p.proteine] = (compteProt[p.proteine] || 0) + 1; });
     const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
@@ -335,11 +334,9 @@
     }
     if (!pool.length) return null;
 
-    // CONTRAINTES DURES (adjacence protéine, quota hebdo) : on relâche par paliers si besoin
+    // CONTRAINTE (quota hebdo par protéine) : relâchée seulement si aucun plat ne la respecte
     const contraintes = [
-      (r) => r.proteine !== protPrec && r.proteine !== protSuiv && (compteProt[r.proteine] || 0) < 2,
-      (r) => r.proteine !== protPrec && r.proteine !== protSuiv,
-      (r) => r.proteine !== protPrec,
+      (r) => (compteProt[r.proteine] || 0) < 2,
       () => true,
     ];
     let eligibles = pool;
@@ -505,17 +502,10 @@
 
   const ingredientsExclus = (r) => [...new Set(state.exclusions.flatMap((ex) => exclusParRegle(r, ex)))];
 
-  /** Signale deux jours VOISINS qui servent la même protéine. Le cas ne peut venir que
-      d'épingles (le générateur l'interdit), mais il ne doit pas passer sous silence. */
-  function marquerProteinesVoisines(plan) {
-    plan.forEach((p, i) => { if (p) delete p.protAlerte; });
-    for (let i = 1; i < plan.length; i++) {
-      const a = plan[i - 1], b = plan[i];
-      if (!a || !b || a.proteine !== b.proteine) continue;
-      const libelle = `même protéine que ${a.jour === b.jour ? "le jour voisin" : ""}`.trim();
-      a.protAlerte = `${a.proteine} aussi ${b.jour.toLowerCase()}`;
-      b.protAlerte = `${b.proteine} aussi ${a.jour.toLowerCase()}`;
-    }
+  /** v43 : plus d'avertissement « deux jours de suite » (même protéine deux jours voisins : permis, choix du
+      07/10). On efface celui que portent encore les menus enregistrés par une version antérieure. */
+  function effacerAlertesProteine(plan) {
+    plan.forEach((p) => { if (p) delete p.protAlerte; });
     return plan;
   }
 
@@ -555,7 +545,7 @@
         const exclus = ingredientsExclus(r);
         if (exclus.length) p.exclusAlerte = exclus; else delete p.exclusAlerte;
       });
-      marquerProteinesVoisines(s.plan);
+      effacerAlertesProteine(s.plan);
     });
     save("semaine");
     if (s1) save("suivante");
@@ -582,7 +572,7 @@
     // les autres jours se génèrent autour et VOIENT les protéines déjà posées : un plat
     // imposé n'échappe donc pas à l'anti-répétition, il la contraint.
     // Jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
-    // pour que les jours souples (Express, Mijoté) s'adaptent ensuite et évitent l'adjacence.
+    // pour que les jours souples (Express, Mijoté) s'adaptent ensuite au quota de 2 par protéine.
     const ordre = cadre.map((c, i) => {
       const cand = candidats(c, interdites);
       return { i, prot: new Set(cand.map((r) => r.proteine)).size || 99, n: cand.length };
@@ -647,7 +637,7 @@
 
     // 3) les autres jours autour
     composer(cadre, interdites, plan);
-    state.semaine = { num: sem.num, an: sem.an, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
+    state.semaine = { num: sem.num, an: sem.an, plan: effacerAlertesProteine(plan.filter(Boolean)) };
     appliquerEnviesIngredient(state.semaine);
     save("semaine");
     return state.semaine;
@@ -672,7 +662,7 @@
       plan[i] = entreePlan(c.jour, r, i, plan, true);
     });
     composer(cadre, interdites, plan);
-    state.suivante = { num: sem.num, an: sem.an, plan: marquerProteinesVoisines(plan.filter(Boolean)) };
+    state.suivante = { num: sem.num, an: sem.an, plan: effacerAlertesProteine(plan.filter(Boolean)) };
     appliquerEnviesIngredient(state.suivante);
     save("suivante");
     return state.suivante;
@@ -691,7 +681,7 @@
     if (idx < 0) { s.plan.push({ jour }); s.plan.sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)); idx = s.plan.findIndex((p) => p.jour === jour); }
     s.plan[idx] = entreePlan(jour, r, idx, s.plan, true);
     s.plan.forEach((p) => { if (p.jour !== jour && p.nom === r.nom && !nomEpingle(p.jour, true)) regenJour(p.jour, s); });
-    marquerProteinesVoisines(s.plan);
+    effacerAlertesProteine(s.plan);
     save("suivante");
     return true;
   }
@@ -730,7 +720,7 @@
       const e = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) };
       if (envie && contientIngr(r, envie)) e.envie = envie;
       s.plan[idx] = e;
-      marquerProteinesVoisines(s.plan);
+      effacerAlertesProteine(s.plan);
       save(champDe(s));
     }
   }
@@ -770,7 +760,7 @@
         if (remplacerPourEnvie(s, j, e.nom, !!e.jour)) { changes.push(j); break; }
       }
     });
-    if (changes.length) marquerProteinesVoisines(s.plan);
+    if (changes.length) effacerAlertesProteine(s.plan);
     return changes;
   }
   // horsStyle : avec un jour précis, on accepte un plat d'un autre style plutôt que rien
@@ -825,6 +815,15 @@
       const mots = d.split(/\s+/).filter((m) => m.length > 2).map((m) => (m.length > 3 && /[sx]$/.test(m) ? m.slice(0, -1) : m));
       if (!mots.length) return null;
       candidats = RECIPES.filter((r) => { const t = norm(r.nom); return mots.every((m) => t.includes(m)); });
+      // 3) v43 : à un mot près, le mot manquant dans les ingrédients : « Riz chorizo poivrons » → « Riz au
+      //    chorizo » (poivrons dans la fiche). Même règle que trouver_recette() de guetteur.py.
+      if (!candidats.length && mots.length >= 3) {
+        candidats = RECIPES.filter((r) => {
+          const t = norm(r.nom);
+          const manque = mots.filter((m) => !t.includes(m));
+          return manque.length === 1 && (r.ingredients || []).some((i) => norm(i.nom).includes(manque[0]));
+        });
+      }
     }
     if (candidats.length === 1) return candidats[0];
     if (candidats.length > 1) {
@@ -1071,10 +1070,7 @@
     } else if (p.epingle) {
       alerte = `<div class="epingle-info">Plat imposé par toi pour ce jour.
           ${p.horsCadre ? `<br>⚠️ Hors du style prévu (${esc(p.horsCadre)}).` : ""}
-          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}
-          ${p.protAlerte ? `<br>⚠️ ${esc(p.protAlerte)} — deux jours de suite.` : ""}</div>`;
-    } else if (p.protAlerte) {
-      alerte = `<div class="epingle-info">⚠️ ${esc(p.protAlerte)} — deux jours de suite.</div>`;
+          ${p.exclusAlerte ? `<br>⚠️ Contient : ${esc(p.exclusAlerte.join(", "))} — normalement exclu.` : ""}</div>`;
     }
     const detail = detailDuree(r);
     const plus = [r.bonus ? `Le p'tit plus : ${esc(r.bonus)}` : "", esc(cuissonsTexte(r))].filter(Boolean).join(" · ");

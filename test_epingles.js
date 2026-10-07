@@ -90,17 +90,28 @@
   });
   res.details.joursRemplis5 = plan5.length;
 
-  /* 5. L'anti-répétition par protéine tient toujours sur les jours NON épinglés. */
+  /* 5. (v43) La même protéine deux jours de suite est PERMISE : poisson imposé jeudi, le vendredi peut servir
+        un poisson. Le poisson express est mis en favori (+30) pour que le tirage le choisisse à coup sûr ;
+        avant la v43, la règle d'adjacence l'interdisait. Favoris, notes, promos et menus servis sont remis. */
   reset();
-  if (horsCadre) {
-    M.epingler("Jeu", horsCadre.nom);
-    for (let k = 0; k < 10; k++) {
+  {
+    const st5 = M.getState();
+    const ven = cadre.find((c) => c.jour === "Ven");
+    const poissonJeu = window.RECIPES.find((r) => r.cat === "Poisson" && r.saison === "Toute l'année" && !M.estExclu(r));
+    const poissonVen = window.RECIPES.find((r) => ven && ven.cats.includes(r.cat) && r.proteine === "poisson" &&
+      r.saison === "Toute l'année" && (!ven.maxMin || r.total_min <= ven.maxMin) && !M.estExclu(r));
+    if (!poissonJeu || !poissonVen) res.details.note5 = "pas de poisson express dans la base : cas 5 non testable";
+    else {
+      const CH = ["favoris", "notes", "promos", "servis", "historique"];
+      const avant5 = Object.fromEntries(CH.map((c) => [c, JSON.stringify(st5[c])]));
+      st5.favoris = [poissonVen.nom]; st5.notes = {}; st5.promos = []; st5.servis = []; st5.historique = [];
+      M.epingler("Jeu", poissonJeu.nom);
       const plan = M.generer().plan;
-      for (let i = 1; i < plan.length; i++) {
-        const a = plan[i - 1], b = plan[i];
-        if (a.epingle || b.epingle) continue;      // deux épingles adjacentes = choix assumé
-        if (a.proteine === b.proteine) ech(`5. ${a.jour}+${b.jour} tous deux "${a.proteine}" (jours libres)`);
-      }
+      const v = plan.find((x) => x.jour === "Ven");
+      res.details.vendredi5 = v && v.nom;
+      if (!v || v.nom !== poissonVen.nom) ech(`5. vendredi = « ${v && v.nom} » au lieu du poisson favori « ${poissonVen.nom} » (adjacence encore interdite ?)`);
+      if (plan.some((x) => x.protAlerte)) ech("5. un avertissement « deux jours de suite » est encore posé");
+      CH.forEach((c) => { st5[c] = avant5[c] === undefined ? undefined : JSON.parse(avant5[c]); });
     }
   }
 
@@ -160,7 +171,7 @@
     }
   }
 
-  /* 10. Deux épingles adjacentes avec la MÊME protéine doivent être signalées. */
+  /* 10. (v43) Deux épingles adjacentes avec la MÊME protéine : AUCUN avertissement (choix du 07/10). */
   reset();
   {
     const prot = window.RECIPES[0].proteine;
@@ -172,8 +183,13 @@
       const plan = M.generer().plan;
       const a = plan.find((x) => x.jour === "Jeu"), b = plan.find((x) => x.jour === "Ven");
       if (!a || !b) ech("10. un des deux jours épinglés est absent du menu");
-      else if (!a.protAlerte && !b.protAlerte) ech(`10. deux "${prot}" côte à côte sans aucun avertissement`);
-      else res.details.alerteProt = a.protAlerte || b.protAlerte;
+      else if (a.protAlerte || b.protAlerte) ech(`10. deux "${prot}" côte à côte encore signalés : ${a.protAlerte || b.protAlerte}`);
+      const tab = document.querySelector('.tab[data-view="semaine"]');
+      if (tab) {
+        tab.click();
+        const texte = (document.querySelector("#view-semaine") || { textContent: "" }).textContent;
+        if (/deux jours de suite/.test(texte)) ech("10. l'écran Semaine affiche encore « deux jours de suite »");
+      }
     }
   }
 

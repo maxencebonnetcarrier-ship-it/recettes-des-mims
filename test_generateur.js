@@ -14,12 +14,10 @@
       res.joursVides++;
     }
 
-    // RÈGLE DURE : jamais la même protéine deux jours consécutifs
-    for (let i = 1; i < plan.length; i++) {
-      if (plan[i].proteine === plan[i - 1].proteine) {
-        res.echecs.push(`run ${k}: ${plan[i - 1].jour}+${plan[i].jour} tous deux "${plan[i].proteine}" (${plan[i - 1].nom} / ${plan[i].nom})`);
-      }
-    }
+    // (v43) deux jours de suite avec la même protéine sont permis : plus de règle d'adjacence à vérifier
+
+    // aucun avertissement « deux jours de suite » (retiré en v43)
+    plan.forEach((p) => { if (p.protAlerte) res.echecs.push(`run ${k}: ${p.jour} porte encore un avertissement de protéine`); });
 
     // RÈGLE : une protéine pas plus de 3x dans la semaine
     const c = {};

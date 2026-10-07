@@ -217,8 +217,9 @@ def lire_avec_glaneur(urls):
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write("\n".join(urls) + "\n")
     try:
+        # sans fenêtre : lancé par le guetteur (pythonw), node ouvrait sinon une console à chaque lecture
         p = subprocess.run(commande_glaneur() + ["recettes", f.name, "--delay", "1"], capture_output=True,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", creationflags=0x08000000 if os.name == "nt" else 0)
     finally:
         os.unlink(f.name)
     sys.stderr.write(p.stderr)
