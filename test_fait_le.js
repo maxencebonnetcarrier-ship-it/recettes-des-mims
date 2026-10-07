@@ -87,10 +87,24 @@
       if (JSON.stringify(mer) !== JSON.stringify([autre.nom, prevu.nom].sort())) ech(`4. mercredi dans l'historique : ${JSON.stringify(mer)}`);
     }
 
+    /* 4 bis. Noter depuis l'onglet Recettes, même un plat jamais cuisiné (v48 : « faudrait que je puisse noter depuis
+             les recettes ») : les étoiles sont sur chaque fiche. */
+    {
+      onglet("recettes");
+      const jamais = window.RECIPES.find((r) => r.nom !== GRATIN && r.nom !== autre.nom && !st.notes[r.nom] && !entrees(r.nom).length);
+      const c = carte(jamais.nom);
+      const e = c && c.querySelector('.fait-le [data-act="note"][data-val="3.5"]');
+      if (!e) ech(`4 bis. pas d'étoiles sur la fiche « ${jamais.nom} », jamais cuisinée`);
+      else {
+        e.click();
+        if (st.notes[jamais.nom] !== 3.5) ech(`4 bis. note depuis Recettes : ${st.notes[jamais.nom]}`);
+      }
+    }
+
     /* 5. Noté fait = ne revient pas au menu avant 3 semaines. */
     let revient = 0;
-    for (let k = 0; k < 15; k++) if (M.generer().plan.some((p) => p.nom === autre.nom)) revient++;
-    if (revient) ech(`5. « ${autre.nom} » revient ${revient} fois sur 15 menus`);
+    for (let k = 0; k < 60; k++) if (M.generer().plan.some((p) => p.nom === autre.nom)) revient++;
+    if (revient) ech(`5. « ${autre.nom} » revient ${revient} fois sur 60 menus de la même semaine`);
   } catch (e) {
     ech("exception : " + e + " " + (e.stack || "").split("\n")[1]);
   } finally {

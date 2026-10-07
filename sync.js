@@ -12,7 +12,8 @@
   // v29) doit l'être aussi : le téléphone qui reçoit le nouveau menu par la synchro n'a jamais
   // vu la semaine se terminer, il ne noterait donc rien lui-même. « suivante » (v36) : le menu
   // de la semaine prochaine préparé d'avance, pour que les deux téléphones fassent les mêmes courses.
-  const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies", "epingles", "saisonOff", "servis", "suivante"];
+  // « retraits » (v48) : ingrédients retirés d'une recette par sa croix ✕.
+  const CHAMPS = ["semaine", "historique", "exclusions", "promos", "cadreJours", "favoris", "notes", "envies", "epingles", "saisonOff", "servis", "suivante", "retraits"];
   // Champs en LECTURE SEULE (v38) : écrits par un autre que les téléphones, jamais renvoyés au hub.
   // « guetteur » : où en est chaque envie de plat, écrit par guetteur.py sur le PC. Un téléphone qui le
   // renverrait (avec l'horodatage de sa dernière lecture) pourrait effacer un résultat plus récent.

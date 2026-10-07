@@ -63,7 +63,8 @@
     const i0 = a.ingredients.findIndex((i) => i.qte);
     if (i0 >= 0) {
       const i = a.ingredients[i0];
-      const attendu = `${Math.round(i.qte * 4 / (a.parts_origine || 4) * 10) / 10}`;
+      // arrondie comme partout dans l'app (v48 : « 2,5 verres », jamais « 2.7 ») — la règle a son propre test
+      const attendu = M.qteTexte(i, a.parts_origine).trim();
       const lu = lignes[i0] ? lignes[i0].querySelector(".iq").textContent.trim() : "";
       if (!lu.startsWith(attendu)) ech(`3. « ${i.nom} » : « ${lu} » au lieu de ${attendu} (pour 4 parts)`);
     }
@@ -84,6 +85,39 @@
       const corps = document.querySelector(`#view-semaine details[data-cle="ing-${p.jour}"]`);
       const txt = corps ? corps.textContent : "";
       if (!txt.includes(`Accompagnement : ${a.nom}`)) ech("4. une fois prise, la recette de l'accompagnement n'est pas affichée");
+      // v48 : elle est DANS la recette : une seule liste d'ingrédients, ses étapes dans la préparation
+      const liste = corps ? corps.querySelector(".ing-list") : null;
+      const dansListe = liste ? [...liste.querySelectorAll("li.acc-l")].length : 0;
+      if (dansListe !== a.ingredients.length) ech(`4. ${dansListe} ingrédients de l'accompagnement dans la liste du plat, au lieu de ${a.ingredients.length}`);
+      if ((a.etapes || []).length && !txt.includes(`Pour ${a.nom}`)) ech("4. les étapes de l'accompagnement ne sont pas dans la préparation");
+    }
+
+    /* 4 ter. Choisir un AUTRE accompagnement (↻, ou la liste « Choisir un autre accompagnement ») l'inclut d'office
+              dans le repas et les courses (choix du 07/10). Avant la v48, ↻ ne changeait qu'une idée. */
+    {
+      const p3 = st.semaine.plan.find((x) => x.jour === p.jour);
+      p3.sideChoisi = false; M.sauver(); onglet("courses"); onglet("semaine");
+      const avantSide = p3.side.nom;
+      const b = document.querySelector(`#view-semaine button[data-act="regen-side"][data-jour="${p.jour}"]`);
+      if (!b) ech("4 ter. pas de bouton ↻ d'accompagnement");
+      else {
+        b.click();
+        const p4 = st.semaine.plan.find((x) => x.jour === p.jour);
+        if (p4.side.nom === avantSide) ech("4 ter. ↻ n'a pas changé d'accompagnement");
+        if (!p4.sideChoisi) ech("4 ter. l'accompagnement choisi par ↻ n'est pas inclus dans le repas");
+        const c4 = document.querySelector(`#view-semaine details[data-cle="ing-${p.jour}"]`);
+        if (!c4 || !c4.textContent.includes(`Accompagnement : ${p4.side.nom}`)) ech("4 ter. la recette n'inclut pas l'accompagnement choisi par ↻");
+      }
+      const chips = [...document.querySelectorAll(`#view-semaine button[data-act="prendre-side"][data-jour="${p.jour}"]`)];
+      const cible = chips.find((c) => c.dataset.nom !== st.semaine.plan.find((x) => x.jour === p.jour).side.nom);
+      if (!cible) ech("4 ter. pas de liste « Choisir un autre accompagnement »");
+      else {
+        const nom = cible.dataset.nom;
+        cible.click();
+        const p5 = st.semaine.plan.find((x) => x.jour === p.jour);
+        if (p5.side.nom !== nom || !p5.sideChoisi) ech(`4 ter. choisi dans la liste : « ${nom} », obtenu « ${p5.side.nom} » ${p5.sideChoisi ? "pris" : "non pris"}`);
+        if (!Object.values(M.listeCourses([p.jour])).flatMap((ray) => Object.values(ray)).some((x) => x.plats.includes(nom))) ech(`4 ter. « ${nom} » n'est pas dans les courses`);
+      }
     }
 
     /* 4 bis. Un ingrédient qui porte le mot sans être un féculent (pâte de curry, purée de tomate) n'est ni barré

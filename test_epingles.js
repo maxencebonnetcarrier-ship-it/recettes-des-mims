@@ -91,8 +91,9 @@
   res.details.joursRemplis5 = plan5.length;
 
   /* 5. (v43) La même protéine deux jours de suite est PERMISE : poisson imposé jeudi, le vendredi peut servir
-        un poisson. Le poisson express est mis en favori (+30) pour que le tirage le choisisse à coup sûr ;
-        avant la v43, la règle d'adjacence l'interdisait. Favoris, notes, promos et menus servis sont remis. */
+        un poisson. Le poisson express est mis en favori et noté 5/5 ; le tirage étant pondéré depuis la v48 (plus
+        « à coup sûr »), on tire jusqu'à 40 menus : avant la v43, la règle d'adjacence l'interdisait à chaque fois.
+        Favoris, notes, promos et menus servis sont remis. */
   reset();
   {
     const st5 = M.getState();
@@ -104,13 +105,17 @@
     else {
       const CH = ["favoris", "notes", "promos", "servis", "historique"];
       const avant5 = Object.fromEntries(CH.map((c) => [c, JSON.stringify(st5[c])]));
-      st5.favoris = [poissonVen.nom]; st5.notes = {}; st5.promos = []; st5.servis = []; st5.historique = [];
+      st5.favoris = [poissonVen.nom]; st5.notes = { [poissonVen.nom]: 5 }; st5.promos = []; st5.servis = []; st5.historique = [];
       M.epingler("Jeu", poissonJeu.nom);
-      const plan = M.generer().plan;
-      const v = plan.find((x) => x.jour === "Ven");
-      res.details.vendredi5 = v && v.nom;
-      if (!v || v.nom !== poissonVen.nom) ech(`5. vendredi = « ${v && v.nom} » au lieu du poisson favori « ${poissonVen.nom} » (adjacence encore interdite ?)`);
-      if (plan.some((x) => x.protAlerte)) ech("5. un avertissement « deux jours de suite » est encore posé");
+      let plan = null, v = null, essais = 0;
+      for (; essais < 40; essais++) {
+        plan = M.generer().plan;
+        v = plan.find((x) => x.jour === "Ven");
+        if (plan.some((x) => x.protAlerte)) { ech("5. un avertissement « deux jours de suite » est encore posé"); break; }
+        if (v && v.proteine === "poisson") break;
+      }
+      res.details.vendredi5 = `${v && v.nom} (${essais + 1} tirage(s))`;
+      if (!v || v.proteine !== "poisson") ech(`5. aucun poisson vendredi en 40 tirages, jeudi imposé poisson (adjacence encore interdite ?)`);
       CH.forEach((c) => { st5[c] = avant5[c] === undefined ? undefined : JSON.parse(avant5[c]); });
     }
   }

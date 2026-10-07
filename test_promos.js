@@ -96,7 +96,8 @@
     const pp = s4.plan.find((p) => (window.RECIPES.find((r) => r.nom === p.nom) || { ingredients: [] }).ingredients.some((i) => /poireau/.test(sansAcc(i.nom))));
     if (!pp) ech("4. aucun plat aux poireaux au menu");
     onglet("semaine");
-    const txt4 = [...document.querySelectorAll("#view-semaine .tag-promo")].map((t) => t.textContent).join(" ");
+    // l'étiquette « Promo » et ce qui l'entoure : « Promo poireau » (ligne d'un jour) ou « Promo · poireau dans ce plat »
+    const txt4 = [...document.querySelectorAll("#view-semaine .tag-promo")].map((t) => t.parentElement.textContent).join(" ");
     if (!/poireau/i.test(txt4)) ech(`4. pas d'étiquette « Promo poireau » : « ${txt4} »`);
 
     /* 5. Promo que rien ne contient : dit honnêtement, rien d'inventé. */

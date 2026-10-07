@@ -57,6 +57,11 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `test_doublons.js` — jamais deux fois le même plat dans la semaine (v47) : styles qui se recoupent (volaille
   lundi, sport vendredi), repli quand un style n'a plus rien de neuf, « ↻ Changer », S+1 devenue le menu avec un
   plat imposé déjà prévu un autre jour.
+- v48 : `test_changer.js` (« ↻ Changer » sans revenir sur un plat déjà proposé, « Peu importe » compris ; nouveaux menus
+  variés ; un favori noté 5/5 sort plus souvent), `test_retrait.js` (✕ = retiré de la recette seule, « Remettre »,
+  alerte d'exclusion levée, partage avec l'autre téléphone par un faux hub), `test_quantites.js` (règle d'arrondi, et
+  toutes les quantités de l'onglet Recettes : 426 mal arrondies en v47), `test_boucher.js` (morceau conseillé ou
+  repris, rien pour la charcuterie, conseil dans les courses et la liste copiée).
 
 ## Provenance des recettes
 Récupérées depuis **3 sites spécialisés uniquement** : marmiton.org, saveurs-magazine.fr,
@@ -197,14 +202,38 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
 - Pas deux fois la même recette sur 3 semaines. Le dernier menu affiché d'une semaine terminée compte
   d'office (champ `servis`, partagé par la synchro) : la règle ne dépend pas de « Marquer fait ».
   L'historique « Marquer fait » compte aussi, mais n'est jamais rempli automatiquement.
+  Un plat déjà cuisiné CETTE semaine (« Marquer fait », « Je l'ai fait ») ne revient pas non plus dans un nouveau
+  tirage de la même semaine (`interditesPour`, v48 ; avant, la fenêtre ne couvrait que les semaines passées).
 - **Jamais deux fois le même plat dans la semaine** (v47) : `choisir` écarte les plats déjà posés les autres jours,
   repli compris. Avant, deux jours dont les styles se recoupent (volaille lundi, sport vendredi) pouvaient servir
   le même plat (cas du 07/10 : « Volaille aux endives et au curry » lundi et vendredi). Seule exception : deux
   jours où l'utilisateur a imposé le même plat.
+- **Tirage varié** (v48, choix du 07/10 : « je tombe quasi toujours sur la même chose même quand je mets n'importe
+  quoi ») : `choisir` tire AU SORT avec des chances pondérées (`tirerAuSort`) au lieu de prendre le mieux classé.
+  Poids de base 1 ; promo +4, favori +2, note 4 et plus +2 (3 et plus +1), de saison +1, saveur pas encore servie
+  +0,5 ; une note sous 2 divise les chances par 3. « ↻ Changer » ne revient pas sur un plat déjà proposé ce jour-là
+  (champ `proposes` du plan, remis à zéro quand tout a été proposé) ; « Générer un nouveau menu » fait passer les
+  plats du menu remplacé après les autres (`eviter`, jamais une interdiction).
+- **Croix ✕ d'un ingrédient** (v48, choix du 07/10 : « ne devrait pas exclure complètement la recette mais juste
+  l'enlever de la recette ») : l'ingrédient est retiré de CETTE recette (`state.retraits`, partagé par la synchro) :
+  barré avec « Remettre », hors des courses, et il ne compte plus pour les exclusions (retirer les olives exclues du
+  riz au chorizo lève son alerte). Exclure partout se fait dans Réglages › Exclusions.
+- **Quantités arrondies** (v48, « 0,7 poivron ça veut rien dire ») : `arrondirQte`. À la pièce : entier, au moins 1 ;
+  cuillères, verres, bouteilles : au demi ; g et ml : au 5 près au-delà de 50, 1 200 g affichés 1,2 kg ; cl : entier ;
+  kg, l, dl : au dixième. Virgule décimale.
+- **Chez le boucher** (v48, « toujours proposer la pièce du boucher quand c'est de la viande, comme le sauté de
+  bœuf ») : `conseilBoucher`. Pièce principale = la viande du rayon Boucherie hors charcuterie, la plus lourde ;
+  morceau nommé → repris ; sinon le morceau que nomme le titre suivi de sa viande (« Rouelle de porc »), sinon un
+  conseil selon l'espèce et la cuisson (bœuf : rumsteck ou bavette pour saisir, paleron/macreuse/joue pour mijoter ;
+  veau : noix ou sous-noix, épaule ou tendron, noix ou quasi ; porc : filet mignon ou filet, échine ou épaule ;
+  agneau : côtelettes ou gigot, épaule ou collier ; pot-au-feu, tartare, haché à part). Sur la fiche du jour, dans
+  Recettes, et dans les courses (« demande du rumsteck… »), liste copiée comprise.
+- **Note depuis Recettes** (v48) : les étoiles sont sur chaque fiche, cuisinée ou non.
 - Légumes de saison (saison déduite du mois courant).
 - Pas deux fois la même saveur dominante dans la semaine.
 - **Exclusions** : `EXCLUS_DEFAUT` (abats, **tomate crue**, champignon, sucré-salé) + celles que
-  l'utilisateur ajoute dans Réglages ou via la croix ✕ sur un ingrédient. Une recette contenant un exclu
+  l'utilisateur ajoute dans Réglages (depuis la v48, la croix ✕ d'un ingrédient ne l'exclut plus : elle le retire
+  de CETTE recette seulement, voir plus bas). Une recette contenant un exclu
   n'est JAMAIS proposée, et disparaît du menu en cours si l'exclusion est ajoutée après coup.
   Une exclusion ordinaire est un MOT cherché dans les noms d'ingrédients (« champignon » écarte les
   champignons cuits comme crus).
@@ -217,7 +246,7 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
     - est crue une tomate fraîche dans un plat sans cuisson, ajoutée après la dernière cuisson, dite « crue »
       ou « au moment de servir », ou jamais citée dans les étapes ;
     - l'ancienne exclusion « tomate », enregistrée sur les téléphones et le hub, vaut « tomate crue » dans
-      l'app (`EXCLUSIONS_RECETTE` d'`app.js`). Une croix ✕ sur un ingrédient « tomates » reste littérale.
+      l'app (`EXCLUSIONS_RECETTE` d'`app.js`). Une exclusion « tomates » tapée dans Réglages reste littérale.
   - **Sucré-salé** : avant le 2026-10-03, le mot était cherché dans les noms d'ingrédients, donc il n'écartait
     jamais rien.
     - `sucre_sale()` refuse un plat (ou un accompagnement) qui contient du miel, un sirop, une confiture, un
@@ -292,6 +321,8 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
   (« Ajouter aux courses », champ `sideChoisi` du plan, partagé par la synchro) ; pris, il remplace
   les féculents de la recette (pommes de terre, riz, pâtes…). Un plat dont le nom contient déjà
   son féculent (« Tajine… et pommes de terre », « Penne au poulet ») n'en reçoit pas.
+  Depuis la v48, CHOISIR un autre accompagnement (↻, ou la liste « Choisir un autre accompagnement ») le prend :
+  il entre dans la recette (une seule liste d'ingrédients, ses étapes dans la préparation) et dans les courses.
 
 ## Décisions délibérées (ne pas re-signaler en review)
 - Les quantités sont mises à l'échelle depuis `parts_origine` vers 4 parts à l'affichage et dans les courses.

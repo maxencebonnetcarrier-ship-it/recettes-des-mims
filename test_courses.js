@@ -50,9 +50,12 @@
           ou un article rangé dans deux rayons par deux recettes (mesuré avant v33 : des
           doublons dans 40 menus sur 40). Comparaison au singulier, sans accents ni contenant. */
     const sansAcc = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/œ/g, "oe").trim();
-    const canon = (n) => sansAcc(n).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()
+    // même règle que l'app (achat) quand elle est exposée : « poivre du moulin » et « poivre » sont UN achat (v48 :
+    // le tirage au sort amenait mercredi des plats où le test, plus naïf, les croyait différents)
+    const canonNaif = (n) => sansAcc(n).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()
       .replace(/^(gousses?|branches?|brins?|bottes?|cubes?) d(e |')/, "")
       .split(" ").map((w) => (w.length > 3 && /[sx]$/.test(w) ? w.slice(0, -1) : w)).join(" ");
+    const canon = (n) => (window.__mims.achat ? window.__mims.achat(n).cle : canonNaif(n));
     let doublons = 0; const exemples = [];
     for (let k = 0; k < 30; k++) {
       window.__mims.generer(); onglet("courses");
@@ -98,7 +101,9 @@
         const nom = nomDe(commun);
         commun.querySelector("input").click();               // coché en ne voyant que mercredi
         puce("tous").click();
-        const ligneTout = lignes().find((r) => nomDe(r) === nom);
+        // même ACHAT, pas forcément le même libellé : la vue affiche la forme la plus longue des jours choisis
+        // (« carotte » mercredi seul, « carottes » sur la semaine) — échec aléatoire constaté le 07/10
+        const ligneTout = lignes().find((r) => canon(nomDe(r)) === canon(nom));
         res.details.articleDeuxJours = nom;
         if (!ligneTout) ech(`6. « ${nom} » disparaît de la vue « Tout »`);
         else if (ligneTout.querySelector("input").checked) ech(`6. « ${nom} » coché pour mercredi apparaît acheté pour toute la semaine`);

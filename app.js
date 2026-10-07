@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 47;
+  const VERSION_APP = 48;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -126,7 +126,8 @@
   if (!state.promos) state.promos = [];        // ingrédients en promo cette semaine (priorité)
   if (!state.cadreJours) state.cadreJours = CADRE_JOURS_DEFAUT.slice(); // style choisi pour chaque jour
   if (!state.favoris) state.favoris = [];       // noms de recettes aimées (priorité à la génération)
-  if (!state.notes) state.notes = {};           // note /5 (demi-étoiles) par recette → priorité
+  if (!state.notes) state.notes = {};
+  if (!state.retraits || typeof state.retraits !== "object") state.retraits = {};   // v48 : { recette: [ingrédients retirés] }           // note /5 (demi-étoiles) par recette → priorité
   if (!state.envies) state.envies = [];         // plats que l'utilisateur veut voir scrapés plus tard
   if (!state.coursesCochees) state.coursesCochees = {};
   if (!state.epingles) state.epingles = {};     // jour → recette imposée pour la semaine en cours
@@ -253,10 +254,15 @@
      l'utilisateur du 2026-10-03 : « sans tomate crue mais sans champi » — sauce, concentré, tomate cuite permis. */
   const EXCLUSIONS_RECETTE = { "tomate": "tomate_crue", "tomate crue": "tomate_crue",
                                "sucre-sale": "sucre_sale", "sucre sale": "sucre_sale" };
+  /* v48 : ingrédients retirés d'UNE recette par sa croix ✕ (choix du 07/10 : « les x d'une recette ne devraient pas
+     exclure complètement la recette mais juste l'enlever de la recette »). Partagé par la synchro (« retraits »).
+     Un ingrédient retiré ne compte plus nulle part : courses, exclusions, accompagnement. */
+  const retraitsDe = (nom) => (state.retraits && Array.isArray(state.retraits[nom]) ? state.retraits[nom] : []);
+  const estRetire = (r, ingNom) => !!r && retraitsDe(r.nom).includes(ingNom);
   const exclusParRegle = (r, ex) => {
     const champ = EXCLUSIONS_RECETTE[norm(ex)];
-    if (champ) return r[champ] || [];
-    return (r.ingredients || []).filter((i) => norm(i.nom).includes(norm(ex))).map((i) => i.nom);
+    if (champ) return (r[champ] || []).filter((n) => !estRetire(r, n));
+    return (r.ingredients || []).filter((i) => !estRetire(r, i.nom) && norm(i.nom).includes(norm(ex))).map((i) => i.nom);
   };
   const estExclu = (r) => state.exclusions.some((ex) => exclusParRegle(r, ex).length > 0);
 
@@ -280,6 +286,15 @@
     (Array.isArray(state.servis) ? state.servis : []).forEach((s) => {
       if (dansFenetre(s) && Array.isArray(s.noms)) s.noms.forEach((n) => set.add(n));
     });
+    return set;
+  }
+  /* v48 : interdits pour un tirage de la semaine de rang « rang » : les 3 semaines passées, PLUS les plats déjà
+     cuisinés cette semaine (historique « fait », dont « Je l'ai fait » de l'onglet Recettes). Avant, un plat
+     cuisiné mercredi pouvait revenir vendredi au premier « Générer » ou « Changer » ; le tirage figé de la v47 le
+     cachait, le tirage au sort de la v48 l'a montré (test_fait_le.js, cas 5). */
+  function interditesPour(rang) {
+    const set = recentes(rang - 1);
+    state.historique.forEach((h) => { if (h.fait && rangDe(h) === rang) set.add(h.nom); });
     return set;
   }
 
@@ -327,14 +342,16 @@
      JAMAIS un plat déjà posé un autre jour de la semaine (v47) : avant, seuls les plats des 3 semaines passées
      étaient écartés, et deux jours dont les styles se recoupent (volaille lundi, sport vendredi) pouvaient
      servir le même plat (cas du 07/10 : « Volaille aux endives et au curry » lundi et vendredi). */
-  function choisir(cadre, interdites, plan, idx, garder) {
+  function choisir(cadre, interdites, plan, idx, garder, eviter) {
     const compteProt = {};
     plan.forEach((p, i) => { if (p && i !== idx) compteProt[p.proteine] = (compteProt[p.proteine] || 0) + 1; });
     const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
     const dejaSemaine = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.nom));
     const garde = (r) => !dejaSemaine.has(r.nom) && (!garder || garder(r));
 
-    let pool = candidats(cadre, interdites).filter(garde);
+    // eviter (v48) : plats déjà proposés (« Changer », nouveau menu), écartés tant qu'il en reste d'autres
+    const neufs = (liste) => { const f = eviter ? liste.filter((r) => !eviter.has(r.nom)) : liste; return f.length ? f : liste; };
+    let pool = neufs(candidats(cadre, interdites).filter(garde));
     if (!pool.length) {
       // Repli : on relâche la saison et l'anti-répétition sur 3 semaines, JAMAIS le temps ni la protéine —
       // sinon un jour « Express ≤15 min » pourrait servir un mijoté de 3 h — ni les plats de CETTE semaine.
@@ -343,6 +360,7 @@
         (!cadre.maxMin || (r.total_min || 0) <= cadre.maxMin) &&
         (!cadre.proteine || PROT_SPORT.has(norm(r.proteine)))
       ).filter(garde);
+      pool = neufs(pool);
     }
     if (!pool.length) return null;
 
@@ -354,14 +372,23 @@
     let eligibles = pool;
     for (const c of contraintes) { const f = pool.filter(c); if (f.length) { eligibles = f; break; } }
 
-    // PRÉFÉRENCES (n'excluent jamais, elles classent) : promo dominante > saison > saveur neuve > aléa.
-    // Score calculé UNE fois par recette (sinon Math.random() dans le comparateur = tri instable).
-    const scored = eligibles.map((r) => ({
-      r,
-      s: (enPromo(r) ? 100 : 0) + (estFavori(r.nom) ? 30 : 0) + (state.notes[r.nom] || 0) * 4 + (pleineSaison(r) ? 10 : 0) + (!saveursVues.has(saveurDe(r)) ? 5 : 0) + Math.random(),
-    }));
-    scored.sort((a, b) => b.s - a.s);
-    return scored[0].r;
+    // PRÉFÉRENCES (v48) : elles PÈSENT sur le tirage, elles ne le décident plus. Avant, le mieux classé gagnait
+    // presque toujours (aléa de 0 à 1 contre +10 de saison, +5 de saveur) : « Changer » et « Nouveau menu »
+    // retombaient sur les mêmes plats (constaté le 07/10). Poids de base 1 ; promo +4, favori +2, note 4 et plus
+    // +2 (3 et plus +1), de saison +1, saveur pas encore servie +0,5 ; une note sous 2 divise les chances par 3.
+    return tirerAuSort(eligibles, (r) => {
+      const n = state.notes[r.nom] || 0;
+      const w = 1 + (enPromo(r) ? 4 : 0) + (estFavori(r.nom) ? 2 : 0) + (n >= 4 ? 2 : n >= 3 ? 1 : 0)
+        + (pleineSaison(r) ? 1 : 0) + (!saveursVues.has(saveurDe(r)) ? 0.5 : 0);
+      return n > 0 && n < 2 ? w / 3 : w;
+    });
+  }
+  // un élément au hasard, chacun avec ses chances (poids)
+  function tirerAuSort(liste, poids) {
+    const w = liste.map(poids);
+    let x = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < liste.length; i++) { x -= w[i]; if (x < 0) return liste[i]; }
+    return liste[liste.length - 1];
   }
 
   /** Va chercher une nouvelle version sans rien effacer des données de l'utilisateur.
@@ -580,7 +607,7 @@
   const champDe = (s) => (s === state.suivante ? "suivante" : "semaine");
 
   // jours sans plat imposé, posés d'après le cadre : protéine la plus FORCÉE d'abord
-  function composer(cadre, interdites, plan) {
+  function composer(cadre, interdites, plan, eviter) {
     // les autres jours se génèrent autour et VOIENT les protéines déjà posées : un plat
     // imposé n'échappe donc pas à l'anti-répétition, il la contraint.
     // Jours à protéine la plus FORCÉE d'abord (ex : Poisson = 1 seule protéine possible),
@@ -591,7 +618,7 @@
     }).filter((o) => !plan[o.i])
       .sort((a, b) => a.prot - b.prot || a.n - b.n).map((o) => o.i);
     for (const i of ordre) {
-      const r = choisir(cadre[i], interdites, plan, i);
+      const r = choisir(cadre[i], interdites, plan, i, null, eviter);
       if (r) plan[i] = entreePlan(cadre[i].jour, r, i, plan, false);
     }
     return plan;
@@ -635,7 +662,7 @@
     }
     if (state.suivante && rangDe(state.suivante) !== rang + 1) { state.suivante = null; save("suivante"); }
 
-    const interdites = recentes(rang - 1);
+    const interdites = interditesPour(rang);
     nomsPlan(semaineSuivante()).forEach((n) => interdites.add(n));   // déjà prévus la semaine prochaine
     // et ceux déjà imposés pour la semaine prochaine, même si son menu n'est pas encore préparé
     JOURS.forEach((j) => { const r = trouverRecette(nomEpingle(j, true)); if (r) interdites.add(r.nom); });
@@ -655,7 +682,8 @@
     });
 
     // 3) les autres jours autour
-    composer(cadre, interdites, plan);
+    // « Générer un nouveau menu » (v48) : les plats du menu qu'il remplace passent après les autres
+    composer(cadre, interdites, plan, new Set(state.semaine && rangDe(state.semaine) === rang ? nomsPlan(state.semaine) : []));
     state.semaine = { num: sem.num, an: sem.an, plan: effacerAlertesProteine(plan.filter(Boolean)) };
     appliquerEnviesIngredient(state.semaine);
     appliquerPromos(state.semaine, true);
@@ -670,7 +698,7 @@
     const rang = rangCourant() + 1;
     const sem = semaineDuRang(rang);
     const cadre = getCadre();
-    const interdites = recentes(rang - 1);
+    const interdites = interditesPour(rang);
     nomsPlan(state.semaine && rangDe(state.semaine) === rang - 1 ? state.semaine : null).forEach((n) => interdites.add(n));
     const plan = new Array(cadre.length).fill(null);
     // les plats imposés pour la semaine prochaine (v37) sont posés d'abord, comme dans generer()
@@ -681,7 +709,7 @@
       if (r.nom !== demande) { epinglesDe()[cleEpingle(c.jour, true)].nom = r.nom; save("epingles"); }
       plan[i] = entreePlan(c.jour, r, i, plan, true);
     });
-    composer(cadre, interdites, plan);
+    composer(cadre, interdites, plan, new Set(nomsPlan(semaineSuivante())));
     state.suivante = { num: sem.num, an: sem.an, plan: effacerAlertesProteine(plan.filter(Boolean)) };
     appliquerEnviesIngredient(state.suivante);
     appliquerPromos(state.suivante, true);
@@ -759,19 +787,25 @@
     // Il faut d'abord retirer l'épingle (bouton « Ne plus imposer »).
     if (nomEpingle(jour, !courante)) return "epingle";
     const cadre = getCadre().find((c) => c.jour === jour);
-    const interdites = recentes(rangDe(s) - 1);
+    const interdites = interditesPour(rangDe(s));
     nomsPlan(autreSemaine(s)).forEach((n) => interdites.add(n));
     s.plan.forEach((p) => interdites.add(p.nom));   // exclut TOUTE la semaine, dont le plat actuel → force un vrai changement
     const copie = s.plan.slice(); copie[idx] = null;
+    // v48 : les plats déjà proposés CE jour-là ne reviennent pas tant qu'il en reste d'autres. Avant, « Changer »
+    // alternait entre deux plats : l'ancien, sorti du menu, redevenait le mieux classé (constaté le 07/10).
+    const proposes = (Array.isArray(s.plan[idx].proposes) ? s.plan[idx].proposes : []).concat(s.plan[idx].nom);
+    const eviter = new Set(proposes);
     // un jour choisi pour une ENVIE d'ingrédient le garde quand on le change
     const envie = s.plan[idx].envie;
     const garder = envie ? (r) => contientIngr(r, envie) : null;
-    let r = choisir(cadre, interdites, copie, idx, garder);
-    if (!r && garder) r = choisir(cadre, interdites, copie, idx);
+    let r = choisir(cadre, interdites, copie, idx, garder, eviter);
+    if (!r && garder) r = choisir(cadre, interdites, copie, idx, null, eviter);
     // si un seul candidat existe (plat actuel ré-exclu), on relâche pour ne pas planter
-    if (!r) { interdites.delete(s.plan[idx].nom); r = choisir(cadre, interdites, copie, idx); }
+    if (!r) { interdites.delete(s.plan[idx].nom); r = choisir(cadre, interdites, copie, idx, null, eviter); }
     if (r) {
       const e = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) };
+      // tout a déjà été proposé : on repart de zéro (le plat tiré n'était évitable qu'en dernier recours)
+      e.proposes = eviter.has(r.nom) ? [] : [...new Set(proposes)].slice(-40);
       if (envie && contientIngr(r, envie)) e.envie = envie;
       s.plan[idx] = e;
       effacerAlertesProteine(s.plan);
@@ -871,7 +905,7 @@
     const cadre = getCadre().find((c) => c.jour === jour);
     if (!cadre) return false;
     const idx = s.plan.findIndex((p) => p.jour === jour);
-    const interdites = recentes(rangDe(s) - 1);
+    const interdites = interditesPour(rangDe(s));
     nomsPlan(autreSemaine(s)).forEach((n) => interdites.add(n));
     s.plan.forEach((p, k) => { if (k !== idx) interdites.add(p.nom); });
     const copie = s.plan.slice(); if (idx >= 0) copie[idx] = null;
@@ -983,7 +1017,7 @@
       if (!r) return;
       const a = sidePris(p, r) ? accDe(p.side) : null;
       // accompagnement pris : il remplace les féculents de la recette
-      ajoute(cle, r.nom, r.ingredients, r.parts_origine, a ? (ing) => estFeculent(ing.nom) : null);
+      ajoute(cle, r.nom, r.ingredients, r.parts_origine, (ing) => estRetire(r, ing.nom) || (!!a && estFeculent(ing.nom)));
       if (a) ajoute(cle, a.nom, a.ingredients, a.parts_origine);
     });
     Object.values(vus).forEach((e) => {
@@ -993,6 +1027,14 @@
       (acc[rayon] = acc[rayon] || {})[norm(nom)] = { nom, cle: e.cle, unites: e.unites, plats: e.plats, jours: e.jours };
     });
     return acc;
+  }
+  // « demande du rumsteck ou de la bavette » pour une viande achetée sans son morceau (v48)
+  function conseilCourses(it) {
+    for (const nom of it.plats) {
+      const c = conseilBoucher(getR(nom));
+      if (c && c.demande && achat(c.ing.nom).cle === it.cle) return `demande ${c.demande}`;
+    }
+    return "";
   }
   function fmtQte(unites) {
     const parts = Object.entries(unites).filter(([u, q]) => q > 0).map(([u, q]) => `${q}${u ? " " + u : ""}`);
@@ -1133,27 +1175,64 @@
     return h;
   }
 
-  // ingrédients (mis à l'échelle), étapes et lien source d'une recette
-  // remplacePar : nom de l'accompagnement pris, qui remplace les féculents de la recette
-  function corpsRecette(r, remplacePar) {
-    const facteur = PARTS_CIBLE / (r.parts_origine || PARTS_CIBLE);
-    const ingr = r.ingredients.map((i) => {
-      const q = i.qte ? `${Math.round(i.qte * facteur * 10) / 10}${i.unite ? " " + i.unite : ""} ` : "";
-      const rempl = remplacePar && estFeculent(i.nom);
-      return `<li${rempl ? ' class="remplace"' : ""}><span class="iq">${esc(q)}</span>${rempl
-          ? `<span class="in"><s>${esc(i.nom)}</s> <em>→ ${esc(remplacePar)}</em></span>` : esc(i.nom)}
-        <button class="x" data-act="exclure" data-ing="${esc(i.nom)}" title="Je n'aime pas — exclure">✕</button></li>`;
-    }).join("");
-    const etapes = (r.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
-    return `<p class="det-t">Pour ${PARTS_CIBLE} parts</p>
-        <ul class="ing-list">${ingr}</ul>
-        ${etapes ? `<p class="det-t">Préparation</p><ol class="step-list">${etapes}</ol>` : ""}
-        ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}`;
+  /* v48 : quantités lisibles pour 4 parts (choix du 07/10 : « 0,7 poivron ça veut rien dire, autant arrondir à 1 »).
+     À la pièce (aucune unité, pièce, tranche, gousse…) : entier, au moins 1. Cuillères, verres : au demi.
+     Grammes, millilitres : au 5 près au-delà de 50. Centilitres : entier. Kilos, litres, décilitres : au dixième. */
+  const MESURE_FINE = /^(g|gr|grammes?|mg|ml|millilitres?)$/;
+  const MESURE_CL = /^(cl|centilitres?)$/;
+  const MESURE_LARGE = /^(kg|kilos?|kilogrammes?|l|litres?|dl|decilitres?)$/;
+  const MESURE_DEMI = /cuill|^c\.? ?a ?(s|c)\b|^(cs|cc|cas|cac)$|verres?|tasses?|bols?|bouteilles?/;
+  function arrondirQte(q, unite) {
+    const u = norm(unite).replace(/\.$/, "");
+    if (MESURE_FINE.test(u)) return q >= 50 ? Math.round(q / 5) * 5 : Math.max(1, Math.round(q));
+    if (MESURE_CL.test(u)) return Math.max(1, Math.round(q));
+    if (MESURE_LARGE.test(u)) return Math.max(0.1, Math.round(q * 10) / 10);
+    if (MESURE_DEMI.test(u)) return Math.max(0.5, Math.round(q * 2) / 2);
+    return Math.max(1, Math.round(q));
   }
-  // apres : la partie accompagnement (v46), entre la recette et la fin
-  const blocRecette = (r, cle, fin, remplacePar, apres) => `<details class="detail" data-cle="${esc(cle)}">
+  // « 300 g », « 2 », « 1,5 cuillères à soupe » pour 4 parts (avec l'espace qui suit) ; "" sans quantité
+  function qteTexte(i, parts) {
+    if (!i.qte) return "";
+    let q = arrondirQte(i.qte * PARTS_CIBLE / (parts || PARTS_CIBLE), i.unite), u = i.unite || "";
+    if (/^(g|gr|grammes?)$/.test(norm(u)) && q >= 1000) { q = Math.round(q / 100) / 10; u = "kg"; }   // 1200 g → 1,2 kg
+    return `${String(q).replace(".", ",")}${u ? " " + u : ""} `;
+  }
+  // achats du plat hors épicerie (sel, poivre, huile : on en a toujours) et hors féculents remplacés
+  const achatsDuPlat = (r) => new Set(r.ingredients.filter((i) => i.rayon !== "Épicerie" && !estFeculent(i.nom) && !estRetire(r, i.nom)).map((i) => achat(i.nom).cle));
+  const aussiDansPlat = (i, communs) => (i.rayon !== "Épicerie" && communs.has(achat(i.nom).cle) ? ` <em class="aussi">aussi dans le plat</em>` : "");
+
+  /* Ingrédients (pour 4 parts), étapes et liens d'une recette. acc : l'accompagnement PRIS. Depuis la v48 il entre
+     DANS la recette (choix du 07/10 : « changer la recette initiale pour inclure cet accompagnement ») : ses
+     ingrédients s'ajoutent à la liste, ses étapes à la préparation, et les féculents du plat qu'il remplace sont
+     barrés. Chaque ingrédient du plat a sa croix ✕ : elle le retire de CETTE recette, « Remettre » l'y remet. */
+  function corpsRecette(r, acc) {
+    const ingr = r.ingredients.map((i) => {
+      const q = qteTexte(i, r.parts_origine);
+      if (estRetire(r, i.nom)) {
+        return `<li class="retire"><span class="iq">${esc(q)}</span><span class="in"><s>${esc(i.nom)}</s> <em>retiré</em></span>
+          <button class="remettre" data-act="remettre" data-nom="${esc(r.nom)}" data-ing="${esc(i.nom)}">Remettre</button></li>`;
+      }
+      const rempl = acc && estFeculent(i.nom);
+      return `<li${rempl ? ' class="remplace"' : ""}><span class="iq">${esc(q)}</span>${rempl
+          ? `<span class="in"><s>${esc(i.nom)}</s> <em>→ ${esc(acc.nom)}</em></span>` : `<span class="in">${esc(i.nom)}</span>`}
+        <button class="x" data-act="retirer" data-nom="${esc(r.nom)}" data-ing="${esc(i.nom)}" title="Retirer de cette recette" aria-label="Retirer ${esc(i.nom)} de cette recette">✕</button></li>`;
+    }).join("");
+    const communs = acc ? achatsDuPlat(r) : null;
+    const ingrAcc = acc ? `<li class="acc-titre">Accompagnement : ${esc(acc.nom)}</li>` + acc.ingredients.map((i) =>
+      `<li class="acc-l"><span class="iq">${esc(qteTexte(i, acc.parts_origine))}</span><span class="in">${esc(i.nom)}${aussiDansPlat(i, communs)}</span></li>`).join("") : "";
+    const etapes = (r.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
+    const etapesAcc = acc ? (acc.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("") : "";
+    return `<p class="det-t">Pour ${PARTS_CIBLE} parts${acc ? ` · avec ${esc(acc.nom)}` : ""}</p>
+        <ul class="ing-list">${ingr}${ingrAcc}</ul>
+        ${etapes ? `<p class="det-t">Préparation</p><ol class="step-list">${etapes}</ol>` : ""}
+        ${etapesAcc ? `<p class="det-t">Pour ${esc(acc.nom)}</p><ol class="step-list">${etapesAcc}</ol>` : ""}
+        ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}
+        ${acc && acc.url ? `<a class="src" href="${esc(acc.url)}" target="_blank" rel="noopener">${esc(acc.nom)} sur ${esc(acc.source || "le site")} ↗</a>` : ""}`;
+  }
+  // apres : la version avec l'accompagnement proposé (v46), entre la recette et la fin
+  const blocRecette = (r, cle, fin, acc, apres) => `<details class="detail" data-cle="${esc(cle)}">
       <summary>Ingrédients, étapes &amp; source</summary>
-      <div class="det-body">${corpsRecette(r, remplacePar)}${apres || ""}${fin || ""}</div>
+      <div class="det-body">${corpsRecette(r, acc)}${apres || ""}${fin || ""}</div>
     </details>`;
 
   /* v46 : le repas AVEC son accompagnement, ajusté à la recette de base (choix du 07/10 : « mettre recette
@@ -1163,23 +1242,19 @@
      une « version avec … » dépliable, et un bouton pour la prendre (elle entre alors dans les courses). */
   function blocAccompagnement(r, side, pris, cle, jour) {
     const a = accDe(side);
-    if (!a) return "";
-    const fq = (i, parts) => (i.qte ? `${Math.round(i.qte * PARTS_CIBLE / (parts || PARTS_CIBLE) * 10) / 10}${i.unite ? " " + i.unite : ""} ` : "");
-    // achat commun au plat et à l'accompagnement, hors épicerie (sel, poivre, huile : on en a toujours) et hors
-    // féculents que l'accompagnement remplace (les pommes de terre du plat ne sont plus achetées pour lui)
-    const dansPlat = new Set(r.ingredients.filter((i) => i.rayon !== "Épicerie" && !estFeculent(i.nom)).map((i) => achat(i.nom).cle));
-    const remplaces = r.ingredients.filter((i) => estFeculent(i.nom));
-    const ingr = a.ingredients.map((i) => `<li><span class="iq">${esc(fq(i, a.parts_origine))}</span><span>${esc(i.nom)}${
-      i.rayon !== "Épicerie" && dansPlat.has(achat(i.nom).cle) ? ` <em class="aussi">aussi dans le plat</em>` : ""}</span></li>`).join("");
+    // pris : il est déjà DANS la recette (corpsRecette, v48)
+    if (!a || pris) return "";
+    const communs = achatsDuPlat(r);
+    const remplaces = r.ingredients.filter((i) => estFeculent(i.nom) && !estRetire(r, i.nom));
+    const ingr = a.ingredients.map((i) => `<li><span class="iq">${esc(qteTexte(i, a.parts_origine))}</span><span>${esc(i.nom)}${aussiDansPlat(i, communs)}</span></li>`).join("");
     const etapes = (a.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
     const corps = `<p class="det-t">Accompagnement : ${esc(a.nom)} · pour ${PARTS_CIBLE} parts</p>
         <ul class="ing-list acc-ing">${ingr}</ul>
         ${etapes ? `<p class="det-t">Préparation de l'accompagnement</p><ol class="step-list">${etapes}</ol>` : ""}
         ${a.url ? `<a class="src" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.nom)} sur ${esc(a.source || "le site")} ↗</a>` : ""}`;
-    if (pris) return corps;
     const ajuste = remplaces.length
       ? `<p class="det-t">Le plat, ajusté</p>
-        <ul class="ing-list">${remplaces.map((i) => `<li class="remplace"><span class="iq">${esc(fq(i, r.parts_origine))}</span><span class="in"><s>${esc(i.nom)}</s> <em>→ ${esc(a.nom)}</em></span></li>`).join("")}</ul>
+        <ul class="ing-list">${remplaces.map((i) => `<li class="remplace"><span class="iq">${esc(qteTexte(i, r.parts_origine))}</span><span class="in"><s>${esc(i.nom)}</s> <em>→ ${esc(a.nom)}</em></span></li>`).join("")}</ul>
         <p class="plus">Le reste du plat ne change pas.</p>`
       : `<p class="plus">Le plat ne change pas : ${esc(a.nom)} s'y ajoute.</p>`;
     return `<details class="detail alt" data-cle="${esc(cle)}">
@@ -1188,6 +1263,68 @@
           <button class="pris" data-act="choisir-side" data-jour="${esc(jour)}">+ Prendre cette version (ajoutée aux courses)</button>
         </div>
       </details>`;
+  }
+
+  /* v48 : le morceau à demander au boucher (choix du 07/10 : « toujours proposer la pièce du boucher quand c'est de
+     la viande, comme pour le sauté de bœuf »). Pièce principale : la viande du rayon Boucherie qui n'est pas de la
+     charcuterie, la plus lourde. Si la recette nomme le morceau (côtes, épaule, bavette…), on le reprend tel quel ;
+     si elle dit seulement « bœuf », « porc », « agneau »…, le morceau qui convient à la cuisson (rapide, mijotée,
+     rôtie), ou celui que nomme le titre (« Rouelle de porc »). Les conseils sont ceux de la boucherie courante :
+     rumsteck ou bavette pour saisir, paleron ou macreuse pour mijoter, noix ou quasi de veau pour rôtir… */
+  const CHARCUTERIE = /\b(lardons?|bacon|jambons?|chorizos?|saucisses?|saucissons?|poitrine|lard|os a moelle|sang|crepines?|pancetta|coppa|merguez|chipolatas?|knacks?|cervelas|rillons?|boudins?|crepinettes?)\b/;
+  const MORCEAU = /\b(bavettes?|rumstecks?|faux[ -]filets?|filets? mignons?|filets?|entrecotes?|onglets?|hampes?|paleron|macreuse|joues?|gite|culotte|jarrets?|plat de cotes|tendrons?|epaules?|noix|quasi|escalopes?|cotes?|echine|palette|rouelle|gigots?|carres?|collier|souris|noisettes?|cotelettes?|selle|cuisses?|hauts? de cuisse|blancs?|supremes?|aiguillettes?|magrets?|haches?|hachees?|lamelles|lanieres|morceaux|entiers?|entieres?|coqs?|roti de (dinde|volaille|poulet))\b/;
+  const ESPECES = [["boeuf", /\b(boeuf|bœuf|steaks?|bavettes?|rumstecks?|paleron|macreuse)\b/], ["veau", /\bveau\b/],
+    ["porc", /\b(porc|echine|cochon)\b/], ["agneau", /\b(agneau|mouton|gigot)\b/], ["lapin", /\blapins?\b/],
+    ["volaille", /\b(poulets?|dindes?|volailles?|pintades?|canards?|coqs?|poules?|chapons?|cailles?)\b/]];
+  const CONSEILS_BOUCHER = {
+    boeuf: { rapide: "du rumsteck ou de la bavette", mijote: "du paleron, de la macreuse ou de la joue de bœuf",
+             roti: "du rumsteck ou du faux-filet, ficelé en rôti", potaufeu: "du plat de côtes, du paleron et du jarret",
+             tartare: "du rumsteck ou du filet, haché devant toi", hache: "du bœuf haché, ou du paleron haché minute" },
+    veau: { rapide: "des escalopes dans la noix ou la sous-noix", mijote: "de l'épaule ou du tendron", roti: "de la noix ou du quasi" },
+    porc: { rapide: "du filet mignon ou du filet", mijote: "de l'échine ou de l'épaule", roti: "du filet ou de l'échine, ficelé en rôti" },
+    agneau: { rapide: "des côtelettes ou des tranches de gigot", mijote: "de l'épaule ou du collier", roti: "un gigot ou une épaule" },
+    volaille: { rapide: "des blancs (filets) ou des escalopes", mijote: "une volaille découpée en morceaux, ou des cuisses", roti: "une volaille fermière entière" },
+    lapin: { rapide: "un lapin découpé en morceaux", mijote: "un lapin découpé en morceaux", roti: "un lapin entier" },
+  };
+  const grammes = (i) => (i.qte || 0) * ({ kg: 1000, g: 1, gr: 1 }[norm(i.unite)] || 0);
+  function conseilBoucher(r) {
+    if (!r) return null;
+    const viandes = r.ingredients.filter((i) => i.rayon === "Boucherie" && !estRetire(r, i.nom) && !CHARCUTERIE.test(norm(i.nom)));
+    if (!viandes.length) return null;
+    const ing = viandes.slice().sort((a, b) => grammes(b) - grammes(a))[0];
+    const n = norm(ing.nom), titre = norm(r.nom);
+    const espece = (ESPECES.find(([, re]) => re.test(n)) || ESPECES.find(([, re]) => re.test(titre)) || [])[0];
+    if (!espece) return null;
+    const quoi = `${qteTexte(ing, r.parts_origine)}${ing.nom}`.trim();
+    if (MORCEAU.test(n)) return { ing, quoi, demande: null };
+    // le morceau que nomme le titre, s'il est suivi de sa viande (« Rouelle de porc », « Filets de dinde ») : jamais
+    // un mot pris ailleurs (« haricots blancs »)
+    const m = titre.match(MORCEAU);
+    if (m && /^\s+(de |du |d'|d’)/.test(titre.slice(m.index + m[0].length))) {
+      return { ing, quoi, demande: ": " + r.nom.substr(m.index, m[0].length).toLowerCase() };
+    }
+    const style = /tartare/.test(titre) ? "tartare" : /pot au feu|pot-au-feu|potee/.test(titre) ? "potaufeu"
+      : /chili|hachis|boulettes?|bolognaise|keftas?/.test(titre) ? "hache"
+      : (r.cat === "Rôti" || /\b(roti|rotie|au four)\b/.test(titre)) ? "roti"
+      : (r.cat === "Mijoté" || (r.cuisson_min || 0) >= 60) ? "mijote" : "rapide";
+    const c = CONSEILS_BOUCHER[espece];
+    let demande = c[style] || c.rapide;
+    if (style === "rapide" && /saute|wok|emince|lamelle|laniere|fajita/.test(titre)) demande += ", en lanières";
+    if (style === "mijote" && espece !== "volaille" && espece !== "lapin") demande += ", en gros cubes";
+    return { ing, quoi, demande };
+  }
+  function boucherHtml(r) {
+    const c = conseilBoucher(r);
+    if (!c) return "";
+    return `<div class="boucher">Chez le boucher : <strong>${esc(c.quoi)}</strong>${c.demande ? ` · demande ${esc(c.demande)}` : ""}</div>`;
+  }
+
+  // v48 : choisir un autre accompagnement l'INCLUT dans le repas (recette et courses)
+  function autresAccompagnements(r, side, jour) {
+    const compat = ACC().filter((a) => (a.suits || []).includes(r.cat) && a.nom !== side.nom);
+    if (!compat.length) return "";
+    return `<details class="autres-acc"><summary>Choisir un autre accompagnement</summary><div class="chips">${compat.map((a) =>
+      `<button class="chip" data-act="prendre-side" data-jour="${esc(jour)}" data-nom="${esc(a.nom)}">${esc(a.nom)}${promoDe(a) ? " · promo" : ""}</button>`).join("")}</div></details>`;
   }
 
   // les épingles ne valent que pour la semaine courante : jamais montrées sur S+1 (v36)
@@ -1228,9 +1365,11 @@
           ? ` <span class="tag-promo" title="${esc(pr.acc)} en promo">Promo</span>` : ""}
         <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement" aria-label="Changer l'accompagnement">↻</button></div>
         <div class="avec-choix"><button class="pris${pris ? " on" : ""}" data-act="choisir-side" data-jour="${esc(p.jour)}" aria-pressed="${pris}">${pris ? `${icoCoche}Dans les courses` : "+ Ajouter aux courses"}</button>${feculents.length
-          ? `<span class="remplace-info">${pris ? "remplace" : "à la place de"} : ${esc(feculents.join(", "))}</span>` : ""}</div>` : ""}
+          ? `<span class="remplace-info">${pris ? "remplace" : "à la place de"} : ${esc(feculents.join(", "))}</span>` : ""}</div>
+        ${autresAccompagnements(r, side, p.jour)}` : ""}
       ${ligneEco(r, pris ? accDe(side) : null, feculents)}
       ${plus ? `<div class="plus">${plus}</div>` : ""}
+      ${boucherHtml(r)}
       ${r.url ? `<a class="bt" href="${esc(r.url)}" target="_blank" rel="noopener">Voir la recette sur ${esc(r.source || "le site")} ↗</a>` : ""}
       <div class="actions">
         ${p.epingle
@@ -1240,7 +1379,7 @@
         ${btnFavori(r.nom)}
       </div>
       ${blocRecette(r, (s1 ? "ing-s1-" : "ing-") + p.jour, `<p class="style-jour">Style du jour : ${esc(cadre.note)}</p>
-        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`, pris ? side.nom : null,
+        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`, pris ? accDe(side) : null,
         side ? blocAccompagnement(r, side, pris, (s1 ? "alt-s1-" : "alt-") + p.jour, p.jour) : "")}`;
   }
   // jour sans plat : demande en attente, ou aucun plat possible
@@ -1446,6 +1585,7 @@
     let n = 0, html = "";
     rayons.forEach((rayon) => {
       const items = Object.values(acc[rayon]).sort((a, b) => a.nom.localeCompare(b.nom));
+      const conseil = (it) => (rayon === "Boucherie" ? conseilCourses(it) : "");
       html += `<h3 class="cat-title orn"><i></i>${esc(rayon)}<i></i></h3><div class="shop-list">`;
       items.forEach((it) => {
         n++;
@@ -1455,6 +1595,7 @@
           <input type="checkbox" data-act="course" data-ids="${esc(JSON.stringify(ids))}" ${ok ? "checked" : ""} />
           <span class="sn">${esc(it.nom)}</span>
           <span class="sp">${esc(it.jours.map(libJour).join(", ") + " — " + it.plats.join(" · "))}</span>
+          ${conseil(it) ? `<span class="boucher-c">${esc(conseil(it))}</span>` : ""}
         </label>`;
       });
       html += `</div>`;
@@ -1499,7 +1640,7 @@
         .sort((a, b) => a.nom.localeCompare(b.nom));
       if (!reste.length) return;
       out += `\n— ${rayon} —\n`;
-      reste.forEach((it) => { out += `• ${it.nom}\n`; n++; });
+      reste.forEach((it) => { const c = rayon === "Boucherie" ? conseilCourses(it) : ""; out += `• ${it.nom}${c ? ` (${c})` : ""}\n`; n++; });
     });
     const plus = plusDesJours(filtre).filter((it) => !estCoche(idPlus(it.plat, it.rang)));
     if (plus.length) {
@@ -1531,6 +1672,7 @@
             <div class="det-body">
               ${detail ? `<p class="plus">${fmtDuree(dureeTotale(r))} : ${detail}</p>` : ""}
               ${r.bonus ? `<p class="plus">Le p'tit plus : ${esc(r.bonus)}</p>` : ""}
+              ${boucherHtml(r)}
               ${corpsRecette(r)}
               ${blocFait(r)}
             </div>
@@ -1573,7 +1715,7 @@
     const auj = isoJour(new Date());
     return `<div class="fait-le">
         ${faits.length ? `<p class="plus">Cuisiné ${faits.slice(0, 3).map((h) => `le ${esc(dateHistorique(h))}`).join(", ")}${faits.length > 3 ? "…" : ""}</p>` : ""}
-        ${faits.length || state.notes[r.nom] ? `<div class="note-row">Ta note : ${etoiles(r.nom)}</div>` : ""}
+        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>
         <div class="add-row"><input type="date" class="date-fait" value="${auj}" max="${auj}" aria-label="Date où tu l'as cuisiné" />
           <button data-act="fait-le" data-nom="${esc(r.nom)}">✓ Je l'ai fait</button></div>
       </div>`;
@@ -2012,7 +2154,7 @@
     if (t.id === "btn-reset-courses") { state.coursesCochees = {}; save("coursesCochees"); return renderCourses(); }
     if (t.id === "btn-reset") {
       if (confirm("Effacer le menu, l'historique et les exclusions personnalisées ?")) {
-        state = { semaine: null, suivante: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {}, servis: [] };
+        state = { semaine: null, suivante: null, historique: [], exclusions: EXCLUS_DEFAUT.slice(), promos: [], cadreJours: CADRE_JOURS_DEFAUT.slice(), favoris: [], notes: {}, envies: [], coursesCochees: {}, epingles: {}, servis: [], retraits: {} };
         save("semaine"); show("semaine");
       }
       return;
@@ -2069,10 +2211,24 @@
         const pool = (compat.length ? compat : ACC()).filter((a) => !p.side || a.nom !== p.side.nom);
         if (pool.length) {
           const a = pool[Math.floor(Math.random() * pool.length)];
-          // un accompagnement déjà pris reste pris : on change seulement lequel
+          // v48 : en choisir un autre, c'est le prendre : il entre dans la recette et dans les courses
           p.side = { nom: a.nom, url: a.url, source: a.source };
+          p.sideChoisi = true;
           save(champDe(s)); renderSemaine();
+          toast(`${a.nom} : ajouté au repas et aux courses`);
         } else toast("Pas d'autre accompagnement adapté");
+      }
+      return;
+    }
+    if (act === "prendre-side") {
+      const s = semaineVue();
+      const p = s && s.plan.find((x) => x.jour === t.dataset.jour);
+      const a = ACC().find((x) => x.nom === t.dataset.nom);
+      if (p && a) {
+        p.side = { nom: a.nom, url: a.url, source: a.source };
+        p.sideChoisi = true;
+        save(champDe(s)); renderSemaine();
+        toast(`${a.nom} : ajouté au repas et aux courses`);
       }
       return;
     }
@@ -2087,15 +2243,18 @@
       return;
     }
     if (act === "filtre-jour") { filtrerJour(t.dataset.jour); return renderCourses(); }
-    if (act === "exclure") {
-      const ing = t.dataset.ing;
-      if (ajouterExclusion(ing)) {
-        const n = appliquerExclusion();
-        RENDER[vueActive()]();
-        toast(n ? `« ${ing} » exclu — ${n} plat${n > 1 ? "s" : ""} remplacé${n > 1 ? "s" : ""}`
-                : `« ${ing} » exclu`);
-      } else toast("Déjà dans les exclusions");
-      return;
+    // ✕ d'un ingrédient (v48) : retiré de CETTE recette seulement ; l'exclure partout se fait dans Réglages
+    if (act === "retirer" || act === "remettre") {
+      const nom = t.dataset.nom, ing = t.dataset.ing;
+      const l = retraitsDe(nom).filter((x) => x !== ing);
+      if (act === "retirer") l.push(ing);
+      if (l.length) state.retraits[nom] = l; else delete state.retraits[nom];
+      save("retraits");
+      rafraichirAlertes();
+      RENDER[vueActive()]();
+      return toast(act === "retirer"
+        ? `« ${ing} » retiré de ${nom}. Pour ne plus en avoir dans aucun plat : Réglages › Exclusions`
+        : `« ${ing} » remis dans ${nom}`);
     }
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save("exclusions"); return renderReglages(); }
     if (act === "fait") {
@@ -2301,7 +2460,7 @@
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
     rafraichir: () => { try { appliquerDemandesArrivees(); RENDER[vueActive()](); } catch (e) {} recupererAjouts(); },
-    appliquerDemandesArrivees, appliquerPromos, promoDe, noterFaitLe,
+    appliquerDemandesArrivees, appliquerPromos, promoDe, noterFaitLe, arrondirQte, qteTexte, conseilBoucher, regenJour, achat,
     ajoutsEnAttente,
   };
 

@@ -126,6 +126,19 @@ p.empty { font-family: var(--serif); font-style: italic; text-align: center; col
 .fait-le { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--ln); }
 .fait-le .add-row { margin: 6px 0 0; }
 .fait-le .add-row input { flex: 1; min-width: 0; }
+/* v48 : ingrédient retiré d'une recette, accompagnement inclus, morceau du boucher, autres accompagnements */
+.ing-list li.retire .in s, .ing-list li.retire .iq { opacity: .5; }
+.ing-list li.retire em { font-size: .72rem; color: var(--soft); }
+button.remettre { margin-left: auto; flex-shrink: 0; border: 1px solid var(--btn); border-radius: 999px; background: var(--champ);
+  color: var(--ac); font-size: .72rem; font-weight: 600; padding: 3px 10px; cursor: pointer; }
+.ing-list li.acc-titre { font-size: .64rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--soft); padding-top: 12px; }
+.boucher { font-size: .8rem; color: var(--mut); margin-top: 6px; }
+.boucher strong { color: var(--ink); font-weight: 600; }
+.boucher-c { grid-column: 2; min-width: 0; font-family: var(--serif); font-style: italic; font-size: .76rem; color: var(--ac); }
+.autres-acc { margin-top: 6px; }
+.autres-acc > summary { list-style: none; cursor: pointer; font-size: .78rem; color: var(--ac); }
+.autres-acc > summary::-webkit-details-marker { display: none; }
+.autres-acc .chips { justify-content: center; margin-top: 6px; }
 .promos-semaine { margin: 8px 0 0; padding-left: 18px; font-size: .8rem; color: var(--mut); line-height: 1.45; }
 .prix { font-family: var(--sans); font-style: normal; font-weight: 700; letter-spacing: .03em; color: var(--ac); white-space: nowrap; }
 .prix i { font-style: normal; opacity: .3; }

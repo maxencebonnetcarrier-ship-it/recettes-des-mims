@@ -43,15 +43,16 @@
       && r.saison === "Toute l'année" && !M.estExclu(r));
     if (!fav) ech("1. précondition : aucune volaille de 30 min ou moins");
     else {
-      st.favoris = [fav.nom];
-      let lundi = 0;
-      for (let k = 0; k < 10; k++) {
+      // le tirage est au sort depuis la v48 : favori noté 5/5, et des menus jusqu'à 10 lundis avec lui (80 au plus)
+      st.favoris = [fav.nom]; st.notes = { [fav.nom]: 5 };
+      let lundi = 0, k = 0;
+      for (; k < 80 && lundi < 10; k++) {
         const plan = M.generer().plan;
         if (plan.some((p) => p.jour === "Lun" && p.nom === fav.nom)) lundi++;
         const d = doublons(plan);
         if (d.length) { ech(`1. tirage ${k} : ${d.join(", ")}`); break; }
       }
-      res.details.favoriLundi = `${fav.nom} : ${lundi}/10`;
+      res.details.favoriLundi = `${fav.nom} : ${lundi} lundis sur ${k} menus`;
       if (!lundi) ech(`1. le favori « ${fav.nom} » n'est jamais sorti lundi : le test ne prouve rien`);
     }
 
