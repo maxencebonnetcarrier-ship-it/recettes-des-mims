@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 43;
+  const VERSION_APP = 44;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi

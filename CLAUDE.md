@@ -77,7 +77,8 @@ La règle des 3 sites reste entière pour les recettes que Claude cherche de sa 
      photo, vidéo. Il est cherché dans la variable `GLANEUR`, puis dans la commande `glaneur` installée, puis dans
      `../glaneur`.
    - **Le script complète** ce qu'aucune page n'écrit, par des règles fixes, et AFFICHE chaque déduction :
-     - catégorie du CADRE, protéine (celle du titre d'abord) ;
+     - catégorie du CADRE, protéine (celle du titre d'abord ; rouget, morue, congre, poulpe… comptent comme
+       poisson depuis la v44) ;
      - saison : « Toute l'année » sauf légume de saison ou barbecue dans le titre ;
      - rayon de chaque ingrédient : celui qu'il a déjà dans les lots, sinon une liste de mots ;
      - modes de cuisson (lus dans les étapes), étiquettes poisson gras / maigre / végé.
@@ -102,6 +103,13 @@ les fiches notées au moins 4,2 sur 5 avis et plus, dans la durée du jour, qui 
 `ajouter_recette.py` et ne sont pas une variante d'un plat déjà en base. Relues à la main ensuite : entrées
 (citrons farcis, pain de thon, flan…), charcuterie, gibier et omelettes en trop retirés. Bilan : 66 recettes,
 base 73 → 139 (Volaille 10, Porc 9, Poisson 11, Légumineuses 12, Express 8, Mijoté 8, Rôti 8), toutes Marmiton.
+`lots/lot8_glaneur.json` (07/10, « je veux que tu scrap bcp avec glaneur ») : même méthode, plus large. Au plus
+250 pages lues par catégorie, aucune page relue d'une passe à l'autre. La note des lecteurs est lue sur la page
+(Glaneur ne la rend pas), puis Glaneur extrait chaque recette retenue. Nouveaux filtres : pas d'entrée, de gibier
+ni d'accompagnement de légumes, et au plus 3 plats du même genre (« côtes de… », « omelette… ») par catégorie.
+Relues à la main : apéritifs, entrées et accompagnements retirés (20) ; deux tajines passés en Mijoté. Bilan :
+96 recettes (91 Marmiton, 5 Journal des Femmes), base 139 → 235. Le porc rapide du mercredi est le plus maigre
+(29 plats) : les fiches de porc en 35 min notées 4,2 et plus sont rares.
 
 ### Guetteur des envies (`guetteur.py`, 2026-10-04)
 Choix de l'utilisateur : « il lit mes envies du téléphone, cherche la recette par son nom, l'ajoute et met en
@@ -200,7 +208,7 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
   - **Sucré-salé** : avant le 2026-10-03, le mot était cherché dans les noms d'ingrédients, donc il n'écartait
     jamais rien.
     - `sucre_sale()` refuse un plat (ou un accompagnement) qui contient du miel, un sirop, une confiture, un
-      chutney, du pain d'épices ou un fruit sucré (pomme, ananas, pruneau, abricot, orange…) ;
+      chutney, du pain d'épices, une sauce aigre-douce (v44) ou un fruit sucré (pomme, ananas, pruneau, abricot, orange…) ;
     - le **caramel et le sucre seul restent permis** (choix de l'utilisateur) ;
     - ne comptent pas : citron, coco, cidre, vinaigres, huiles, zeste, pomme de terre, poivron orange, tomates
       cerises (v43 : refusées à tort pour le mot « cerise » ; la règle de la tomate crue s'applique).

@@ -77,7 +77,7 @@ EXCLUS_DEFAUT = ["abats", "tomate crue", "champignon", "sucré-salé"]
 # confiture, chutney, pain d'épices, fait au miel) ou un fruit sucré. Le CARAMEL et le sucre seul restent permis
 # (choix de l'utilisateur, 2026-10-03 : « caramel c'est ok »). Pas sucrés : citron, coco, cidre, vinaigres et huiles
 # de fruit, un zeste (il parfume), la pomme de terre, le poivron orange.
-SUCRES = ["miel", "sirop", "confiture", "chutney", "gelée de", "pain d'épices"]
+SUCRES = ["miel", "sirop", "confiture", "chutney", "gelée de", "pain d'épices", "aigre douce", "aigre doux"]
 FRUITS_SUCRES = ["pomme", "poire", "ananas", "mangue", "abricot", "pruneau", "raisin", "figue", "datte", "pêche",
                  "nectarine", "banane", "cerise", "fraise", "framboise", "myrtille", "mûre", "cassis", "groseille",
                  "canneberge", "cranberry", "cranberries", "airelle", "litchi", "grenade", "coing", "kiwi", "melon",
@@ -164,7 +164,7 @@ import re as _re
 _MENTIONS = [
     "la meilleure recette", "la recette", "recette originale", "tres facile", "rapide et facile",
     "simple et rapide", "succulente et rapide", "tout simple et parfume",
-    "tout simple", "pour les nuls", "inratable", "succulente", "express",
+    "tout simple", "ultra simple", "pour les nuls", "inratable", "succulente", "express",
     "facile", "parfaite", "parfait", "originale", "simple",
     # 07/10 : « Gigot de 7 heures : la recette incontournable », « Chili con carne de Marmiton »
     "incontournable", "de marmiton",
@@ -188,6 +188,11 @@ def nettoyer_nom(nom):
                 s = s[: match.start()].strip(" ,.-:")
                 change = True
                 break
+    # titre écrit en majuscules (« LENTILLES à L'ESPAGNOLE », « BOEUF EN DAUBE », 07/10) : mis en minuscules.
+    # Vérifié le 07/10 : aucun nom déjà en base n'a plus de majuscules que de minuscules.
+    lettres = [c for c in s if c.isalpha()]
+    if lettres and sum(c.isupper() for c in lettres) > len(lettres) / 2:
+        s = s.lower()
     # majuscule initiale : certaines fiches Marmiton sont titrées tout en minuscules (« gratin de ravioles »).
     # Vérifié le 05/10 : aucun nom déjà en base ne commençait par une minuscule (notes et favoris intacts).
     return s[:1].upper() + s[1:]

@@ -248,7 +248,12 @@
     const ambigu = Object.keys(groupes).find((k) => groupes[k].length > 1);
     if (!ambigu) res.details.note12b = "aucun nom ambigu dans la base : cas 12b non testable";
     else {
-      const attendu = groupes[ambigu].slice().sort((a, b) => a.nom.length - b.nom.length)[0];
+      // même comparaison que l'app (trouverRecette) : sans accents ni majuscules, sur TOUTE la base.
+      // « émincés de » vise aussi « Emincés de porc au vin blanc » (v44) : le groupe ci-dessus, sensible aux
+      // accents, ne le contient pas.
+      const sansAcc = (t) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const attendu = window.RECIPES.filter((r) => sansAcc(r.nom).includes(sansAcc(ambigu)))
+        .sort((a, b) => a.nom.length - b.nom.length)[0];
       M.epingler("Mar", ambigu);
       const p = M.generer().plan.find((x) => x.jour === "Mar");
       if (!p || !p.epingle) ech(`12b. « ${ambigu} » (ambigu) laisse le jour en attente`);

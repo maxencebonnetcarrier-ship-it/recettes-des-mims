@@ -73,6 +73,8 @@ verifie(refus4c is None and r4c.get("demande") is True, "4. recette demandée re
 
 # 5. Règles : protéine du titre d'abord, plat long en cocotte = Mijoté, rôti au four = Rôti, saison du titre.
 verifie(A.proteine_de("Petit salé aux lentilles", []) == "porc", "5. petit salé")
+for plat in ("Filets de rougets rôtis au fenouil", "Rougail de morue", "Daube de congre", "Poulpe en daube"):
+    verifie(A.proteine_de(plat, []) == "poisson", f"5. « {plat} » doit être du poisson : {A.proteine_de(plat, [])}")
 verifie(A.proteine_de("Gratin", [{"nom": "bouillon de volaille", "qte": 1, "unite": ""}]) == "végé", "5. bouillon")
 mij = {"nom": "Joues de porc au cidre", "total_min": 150, "cuisson_min": 120, "ingredients": []}
 verifie(A.cat_de(mij, "porc", ["cocotte"]) == "Mijoté", "5. mijoté")
@@ -116,6 +118,9 @@ for salé in ("pommes de terre", "cidre bouché brut", "vinaigre de framboise", 
 from build_data import sucre_sale
 verifie(sucre_sale(ingr("tomates cerises", "tomate cerise")) == [], "5 bis. « tomates cerises » pris pour du sucré-salé (cerise)")
 verifie(sucre_sale(ingr("cerises")) == ["cerises"], "5 bis. de vraies cerises ne sont plus vues comme sucrées")
+verifie(sucre_sale(ingr("sauce aigre-douce", "sauce aigre douce")) == ["sauce aigre-douce", "sauce aigre douce"],
+        "5 bis. la sauce aigre-douce n'est pas vue comme sucrée-salée")
+verifie(sucre_sale(ingr("vinaigre de vin")) == [], "5 bis. le vinaigre pris pour de l'aigre-doux")
 r_dem, _, refus_dem = A.completer(dict(GLANEUR, ingredients=GLANEUR["ingredients"] + ingr("miel")), {}, demande=True)
 verifie(refus_dem is None, "5 bis. une recette demandée sucrée-salée doit passer, comme les autres exclusions")
 

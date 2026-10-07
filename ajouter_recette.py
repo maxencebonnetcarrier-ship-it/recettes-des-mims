@@ -50,7 +50,10 @@ def a_un(s, liste):
 PROTEINES = [  # (valeur des lots, termes) — l'ordre départage un ingrédient qui en cite deux
     ("poisson", ["poisson", "cabillaud", "saumon", "thon", "colin", "merlu", "lieu", "maquereau", "hareng", "sardine",
                  "truite", "dorade", "daurade", "bar", "sole", "crevette", "gambas", "moule", "saint jacques",
-                 "calamar", "encornet", "lotte", "eglefin", "haddock", "anchois"]),
+                 "calamar", "encornet", "lotte", "eglefin", "haddock", "anchois",
+                 # 07/10 : « Filets de rougets rôtis », « Rougail de morue », « Daube de congre » sortaient en végé
+                 "rouget", "morue", "congre", "poulpe", "limande", "fletan", "espadon", "merlan", "langoustine",
+                 "homard", "raie", "turbot", "brochet", "sandre", "tilapia", "loup de mer", "saint pierre"]),
     ("volaille", ["poulet", "dinde", "pintade", "canard", "volaille", "caille", "coquelet", "chapon", "coq", "magret"]),
     ("lapin", ["lapin"]),
     ("agneau", ["agneau", "gigot", "mouton"]),

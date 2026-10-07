@@ -140,6 +140,9 @@ class Choix(unittest.TestCase):
         # cas réels du 07/10 (enrichissement de la base)
         self.assertEqual(G.A.nettoyer_nom("Gigot de 7 heures : la recette incontournable"), "Gigot de 7 heures")
         self.assertEqual(G.A.nettoyer_nom("Chili con carne de Marmiton"), "Chili con carne")
+        self.assertEqual(G.A.nettoyer_nom("LENTILLES à L'ESPAGNOLE"), "Lentilles à l'espagnole")
+        self.assertEqual(G.A.nettoyer_nom("Sauté de boeuf aux oignons ultra simple"), "Sauté de boeuf aux oignons")
+        self.assertEqual(G.A.nettoyer_nom("Poulet au Four en RomerTopf"), "Poulet au Four en RomerTopf")
         # le nom nettoyé est toujours retrouvé par l'envie écrite sur le téléphone
         self.assertIsNotNone(G.trouver_recette("Gratin ravioles", [{"nom": "Gratin de ravioles et courgettes"}]))
 
