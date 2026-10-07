@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 44;
+  const VERSION_APP = 45;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -219,13 +219,17 @@
     // évite de répéter le même accompagnement qu'un autre jour déjà servi
     const dejaVus = new Set((plan || []).filter(Boolean).map((p) => p && p.side && p.side.nom));
     const libres = pool.filter((a) => !dejaVus.has(a.nom));
-    const choix = (libres.length ? libres : pool);
+    // v45 : un accompagnement EN PROMO passe devant (une fois dans la semaine : il est ensuite « déjà vu »)
+    const enPromoLibres = libres.filter((a) => promoDe(a));
+    const choix = enPromoLibres.length ? enPromoLibres : (libres.length ? libres : pool);
     const a = choix[Math.floor(Math.random() * choix.length)];
     return { nom: a.nom, url: a.url, source: a.source };
   }
 
-  const enPromo = (r) => state.promos.length &&
-    r.ingredients.some((i) => state.promos.some((p) => norm(i.nom).includes(norm(p))));
+  /* Promo d'une recette ou d'un accompagnement : la première promo qu'il contient, ou null. Comparée comme un
+     ACHAT (v45 : singulier, accents), sinon « Patate douce » ne trouvait pas « patates douces » (constaté le 07/10). */
+  const promoDe = (r) => (r && state.promos.length ? state.promos.find((p) => contientIngr(r, p)) || null : null);
+  const enPromo = (r) => !!promoDe(r);
   // saison spécifique (pas "toute l'année") correspondant au mois courant
   function pleineSaison(r) {
     const s = norm(r.saison);
@@ -608,9 +612,10 @@
         const k = plan.findIndex((p) => p.jour === c.jour);
         if (r && k >= 0 && plan[k].nom !== r.nom) plan[k] = entreePlan(c.jour, r, k, plan, true);
       });
-      state.semaine = { num: sem.num, an: sem.an, plan };
+      state.semaine = { num: sem.num, an: sem.an, plan, promosVues: state.suivante.promosVues };
       state.suivante = null; save("suivante");
       appliquerEnviesIngredient(state.semaine);
+      appliquerPromos(state.semaine, false);     // courses faites d'avance : seul un accompagnement peut changer
       rafraichirAlertes();                       // protéines voisines + enregistre la semaine
       return state.semaine;
     }
@@ -639,6 +644,7 @@
     composer(cadre, interdites, plan);
     state.semaine = { num: sem.num, an: sem.an, plan: effacerAlertesProteine(plan.filter(Boolean)) };
     appliquerEnviesIngredient(state.semaine);
+    appliquerPromos(state.semaine, true);
     save("semaine");
     return state.semaine;
   }
@@ -664,26 +670,60 @@
     composer(cadre, interdites, plan);
     state.suivante = { num: sem.num, an: sem.an, plan: effacerAlertesProteine(plan.filter(Boolean)) };
     appliquerEnviesIngredient(state.suivante);
+    appliquerPromos(state.suivante, true);
     save("suivante");
     return state.suivante;
   }
 
-  /** Applique au menu S+1 DÉJÀ préparé le plat imposé pour ce jour, sans retirer au sort les
-      autres jours (les courses faites d'avance restent justes). Si ce plat était déjà prévu un
-      autre jour de S+1, cet autre jour est changé. Renvoie vrai si le menu a changé. */
-  function imposerSuivante(jour) {
-    const s = semaineSuivante();
-    const demande = nomEpingle(jour, true);
+  /** Applique au menu DÉJÀ tiré (semaine courante, ou S+1 si s1) le plat imposé pour ce jour, sans retirer au
+      sort les autres jours : les courses faites d'avance restent justes. Si ce plat était déjà prévu un autre jour
+      encore à venir, cet autre jour est changé. Renvoie vrai si le menu a changé. v45 : vaut aussi pour la semaine
+      courante (avant, seul S+1 l'avait, et la semaine courante était entièrement retirée au sort). */
+  function imposerJour(jour, s1) {
+    const s = s1 ? semaineSuivante() : (state.semaine && rangDe(state.semaine) === rangCourant() ? state.semaine : null);
+    const demande = nomEpingle(jour, s1);
     const r = trouverRecette(demande);
     if (!s || !r) return false;
-    if (r.nom !== demande) { epinglesDe()[cleEpingle(jour, true)].nom = r.nom; save("epingles"); }
+    if (r.nom !== demande) { epinglesDe()[cleEpingle(jour, s1)].nom = r.nom; save("epingles"); }
     let idx = s.plan.findIndex((p) => p.jour === jour);
     if (idx < 0) { s.plan.push({ jour }); s.plan.sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)); idx = s.plan.findIndex((p) => p.jour === jour); }
-    s.plan[idx] = entreePlan(jour, r, idx, s.plan, true);
-    s.plan.forEach((p) => { if (p.jour !== jour && p.nom === r.nom && !nomEpingle(p.jour, true)) regenJour(p.jour, s); });
+    const avant = s.plan[idx];
+    const e = entreePlan(jour, r, idx, s.plan, true);
+    // déjà ce plat ce jour-là (tiré au sort) : on le marque imposé sans toucher à son accompagnement pris
+    if (avant && avant.nom === r.nom) { e.side = avant.side; if (avant.sideChoisi) e.sideChoisi = true; }
+    s.plan[idx] = e;
+    const debut = s1 ? 0 : indexAujourdhui();
+    s.plan.forEach((p) => {
+      if (p.jour === jour || p.nom !== r.nom || nomEpingle(p.jour, s1)) return;
+      if (JOURS.indexOf(p.jour) < debut || (!s1 && estFait(s, p.jour))) return;   // passé ou déjà cuisiné : on n'y touche pas
+      regenJour(p.jour, s);
+    });
     effacerAlertesProteine(s.plan);
-    save("suivante");
+    save(s1 ? "suivante" : "semaine");
     return true;
+  }
+  const imposerSuivante = (jour) => imposerJour(jour, true);
+
+  /** v45 : un plat DEMANDÉ pour un jour s'impose tout seul ce jour-là dès que sa recette est dans la base
+      (ajoutée par le guetteur, ou épingle reçue de l'autre téléphone), sans retirer au sort le reste du menu.
+      Avant, le jour restait sur une proposition jusqu'à ce qu'on génère un nouveau menu, qui changeait TOUTE la
+      semaine. Jours passés et jours « fait » non touchés (un plat demandé jamais servi est reporté, voir
+      purgerEpingles). Renvoie les jours changés. */
+  function appliquerDemandesArrivees() {
+    const changes = [];
+    [[state.semaine, false], [semaineSuivante(), true]].forEach(([s, s1]) => {
+      if (!s || !Array.isArray(s.plan) || rangDe(s) !== rangCourant() + (s1 ? 1 : 0)) return;
+      const debut = s1 ? 0 : indexAujourdhui();
+      getCadre().forEach((c) => {
+        if (JOURS.indexOf(c.jour) < debut || (!s1 && estFait(s, c.jour))) return;
+        const r = trouverRecette(nomEpingle(c.jour, s1));
+        if (!r) return;
+        const p = s.plan.find((x) => x.jour === c.jour);
+        if (p && p.epingle && p.nom === r.nom) return;
+        if (imposerJour(c.jour, s1)) changes.push({ jour: c.jour, s1, nom: r.nom });
+      });
+    });
+    return changes;
   }
   /** Le jour redevient automatique dans S+1 : un autre plat y est tiré. */
   function libererSuivante(jour) {
@@ -763,8 +803,57 @@
     if (changes.length) effacerAlertesProteine(s.plan);
     return changes;
   }
-  // horsStyle : avec un jour précis, on accepte un plat d'un autre style plutôt que rien
-  function remplacerPourEnvie(s, jour, ing, horsStyle) {
+  /* ---------- promos (v45) ----------
+     Chaque promo est PROPOSÉE au moins une fois dans la semaine (choix du 07/10 : « me les proposer obli dans la
+     semaine même si c'est pour accompagnement […] en mettant que c'est promo dans l'affichage »). Dans l'ordre :
+     1) un plat ou un accompagnement du menu qui en contient déjà (le tirage favorise les plats en promo) ;
+     2) un accompagnement qui en contient, proposé un jour dont le plat l'accepte : seule la PROPOSITION change,
+        ni le menu ni les courses (un accompagnement déjà pris n'est pas remplacé) ;
+     3) sinon, si `plats`, un plat qui en contient remplace celui d'un jour libre.
+     Jours passés, imposés ou « fait » jamais touchés. Une promo traitée est notée dans la semaine (promosVues) :
+     changer ensuite l'accompagnement à la main (↻) ne la fait pas revenir de force. */
+  function appliquerPromos(s, plats) {
+    const out = [];
+    if (!s || !Array.isArray(s.plan) || !state.promos.length) return out;
+    const courante = rangDe(s) === rangCourant();
+    const debut = courante ? indexAujourdhui() : 0;
+    const libre = (p) => JOURS.indexOf(p.jour) >= debut && !(courante && estFait(s, p.jour));
+    s.promosVues = Array.isArray(s.promosVues) ? s.promosVues : [];
+    state.promos.forEach((promo) => {
+      const cle = cleIngr(promo);
+      if (s.promosVues.includes(cle)) return;
+      const noter = (r) => { s.promosVues.push(cle); out.push(Object.assign({ promo }, r)); };
+      const deja = s.plan.find((p) => libre(p) && (contientIngr(getR(p.nom), promo) || contientIngr(accDe(sideDe(p, getR(p.nom))), promo)));
+      if (deja) return noter({ jour: deja.jour, comment: "deja" });
+      const accs = ACC().filter((a) => contientIngr(a, promo));
+      for (const p of s.plan) {
+        const r = getR(p.nom);
+        if (!libre(p) || !r || platComplet(r) || p.sideChoisi) continue;
+        const a = accs.find((x) => (x.suits || []).includes(r.cat));
+        if (a) { p.side = { nom: a.nom, url: a.url, source: a.source }; return noter({ jour: p.jour, comment: "accompagnement", nom: a.nom }); }
+      }
+      if (!plats) return;
+      const jours = getCadre().map((c) => c.jour).filter((jj) => JOURS.indexOf(jj) >= debut && !nomEpingle(jj, !courante)
+        && !(courante && estFait(s, jj)));
+      for (const jj of jours) {
+        if (remplacerPourEnvie(s, jj, promo, false, true)) {
+          return noter({ jour: jj, comment: "plat", nom: s.plan.find((p) => p.jour === jj).nom });
+        }
+      }
+      noter({ comment: accs.length || recettesAvec(promo).length ? "impossible" : "aucun" });
+    });
+    if (out.some((o) => o.comment === "plat")) effacerAlertesProteine(s.plan);
+    return out;
+  }
+  // ce qui est en promo ce jour-là : dans le plat, ou dans l'accompagnement proposé
+  function promosDuJour(p, r) {
+    const side = sideDe(p, r);
+    return { plat: promoDe(r), acc: side ? promoDe(accDe(side)) : null };
+  }
+
+  // horsStyle : avec un jour précis, on accepte un plat d'un autre style plutôt que rien.
+  // sansEnvie (v45, promos) : le jour n'est pas marqué « Ton envie »
+  function remplacerPourEnvie(s, jour, ing, horsStyle, sansEnvie) {
     const cadre = getCadre().find((c) => c.jour === jour);
     if (!cadre) return false;
     const idx = s.plan.findIndex((p) => p.jour === jour);
@@ -780,7 +869,8 @@
       hors = !!r;
     }
     if (!r) return false;
-    const e = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie), envie: ing };
+    const e = { jour, nom: r.nom, proteine: r.proteine, saveur: saveurDe(r), side: pickSide(r, idx, copie) };
+    if (!sansEnvie) e.envie = ing;
     if (hors) e.horsCadre = cadre.cats.join(" / ");
     if (idx >= 0) s.plan[idx] = e;
     else { s.plan.push(e); s.plan.sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)); }
@@ -1076,9 +1166,12 @@
     const plus = [r.bonus ? `Le p'tit plus : ${esc(r.bonus)}` : "", esc(cuissonsTexte(r))].filter(Boolean).join(" · ");
     const side = sideDe(p, r), pris = sidePris(p, r);
     const feculents = side ? r.ingredients.filter((i) => estFeculent(i.nom)).map((i) => i.nom) : [];
+    const pr = promosDuJour(p, r);
     return `${alerte}
+      ${pr.plat ? `<div class="promo-info"><span class="tag-promo">Promo</span> ${esc(pr.plat)} dans ce plat</div>` : ""}
       <div class="duree"><b>${fmtDuree(dureeTotale(r))}</b>${detail ? `<span>${detail}</span>` : ""}</div>
-      ${side ? `<div class="avec">${pris ? "avec" : "idée d'accompagnement :"} <a href="${esc(side.url)}" target="_blank" rel="noopener">${esc(side.nom)}</a>
+      ${side ? `<div class="avec">${pris ? "avec" : "idée d'accompagnement :"} <a href="${esc(side.url)}" target="_blank" rel="noopener">${esc(side.nom)}</a>${pr.acc
+          ? ` <span class="tag-promo" title="${esc(pr.acc)} en promo">Promo</span>` : ""}
         <button class="btn-side" data-act="regen-side" data-jour="${esc(p.jour)}" title="Changer l'accompagnement" aria-label="Changer l'accompagnement">↻</button></div>
         <div class="avec-choix"><button class="pris${pris ? " on" : ""}" data-act="choisir-side" data-jour="${esc(p.jour)}" aria-pressed="${pris}">${pris ? `${icoCoche}Dans les courses` : "+ Ajouter aux courses"}</button>${feculents.length
           ? `<span class="remplace-info">${pris ? "remplace" : "à la place de"} : ${esc(feculents.join(", "))}</span>` : ""}</div>` : ""}
@@ -1123,8 +1216,11 @@
   function ligneJour(i, sem, s, cadres) {
     const cadre = cadres[i];
     const { p, r } = platDuJour(s, cadre);
-    const l2 = r ? [sidePris(p, r) ? `avec ${esc(p.side.nom)}` : "", fmtDuree(dureeTotale(r))].filter(Boolean).join(" — ")
-      + (prixHtml(r) ? " · " + prixHtml(r) : "") : "";
+    const pr = r ? promosDuJour(p, r) : {};
+    // accompagnement en promo pas encore pris : « idée : … » (« avec » dirait qu'il est déjà dans les courses)
+    const l2 = r ? [sidePris(p, r) ? `avec ${esc(p.side.nom)}` : (pr.acc ? `idée : ${esc(p.side.nom)}` : ""), fmtDuree(dureeTotale(r))].filter(Boolean).join(" — ")
+      + (prixHtml(r) ? " · " + prixHtml(r) : "")
+      + (pr.plat || pr.acc ? ` <span class="tag-promo">Promo ${esc(pr.plat || pr.acc)}</span>` : "") : "";
     // S+1 a ses propres clés de dépliage : sinon ouvrir lundi S+1 rouvrait lundi de cette semaine
     const cle = (s === state.semaine ? "jour-" : "s1-jour-") + cadre.jour;
     return `<details class="jour-ligne${r ? "" : " vide"}" data-cle="${esc(cle)}">
@@ -1167,6 +1263,9 @@
       generer();
       vueSuivante = false;                     // nouvelle semaine : on montre celle qui commence
     }
+    signalerArrivees(appliquerDemandesArrivees());
+    // promo ajoutée avant la v45 (ou reçue de l'autre téléphone) : proposée en accompagnement si possible
+    if (appliquerPromos(state.semaine, false).length) save("semaine");
     if (vueSuivante) return renderSuivante(el);
     const s = state.semaine;
     const sem = semaineDuRang(rangDe(s));
@@ -1260,7 +1359,13 @@
     .map(({ cle, p }) => ({ r: getR(p.nom), rang: rangDuJour(cle) })).filter((x) => x.r && x.r.bonus)
     .map((x) => ({ plat: x.r.nom, quoi: x.r.bonus, rang: x.rang }));
 
+  // « 📌 Gratin… imposé mardi » quand un plat demandé vient d'arriver dans la base
+  function signalerArrivees(ch) {
+    if (!ch.length) return;
+    toast(ch.map((c) => `📌 ${c.nom} : ${JOURS_LONG[JOURS.indexOf(c.jour)].toLowerCase()}${c.s1 ? " prochain" : ""}`).join(" · "));
+  }
   function renderCourses() {
+    signalerArrivees(appliquerDemandesArrivees());
     const el = document.getElementById("view-courses");
     if (!state.semaine) {
       el.innerHTML = enTete("Liste de courses") + `<p class="empty">Génère d'abord un menu dans l'onglet Semaine.</p>`;
@@ -1460,7 +1565,8 @@
     return h + `</div>`;
   }
   function sectionPromos() {
-    let h = `<p class="hint">Tape ce qui est en promo (ex : cabillaud, poulet). Le prochain menu généré privilégiera les recettes qui l'utilisent.</p>
+    let h = `<p class="hint">Tape ce qui est en promo (ex : cabillaud, patate douce). Chaque promo est proposée au moins une fois
+        dans la semaine : un plat qui en contient, sinon un accompagnement. Elle est marquée « Promo » dans le menu.</p>
       <div class="add-row">
         <input id="new-promo" placeholder="Ex. : cabillaud" />
         <button id="btn-add-promo">Ajouter</button>
@@ -1469,7 +1575,23 @@
     state.promos.forEach((e, i) => {
       h += `<span class="chip promo">${esc(e)}<button data-act="unpromo" data-i="${i}" title="Retirer">✕</button></span>`;
     });
-    return h + `</div>`;
+    h += `</div>`;
+    const lignes = state.promos.map((e) => `<li><strong>${esc(e)}</strong> : ${esc(ouEstPromo(e))}</li>`).join("");
+    return h + (lignes ? `<ul class="promos-semaine">${lignes}</ul>` : "");
+  }
+  // où la promo apparaît dans le menu de la semaine (texte de Réglages › Promos et du message d'ajout)
+  function ouEstPromo(promo) {
+    const s = state.semaine;
+    const jourL = (j) => JOURS_LONG[JOURS.indexOf(j)].toLowerCase();
+    const vus = (s && Array.isArray(s.plan) ? s.plan : []).map((p) => {
+      const r = getR(p.nom);
+      if (contientIngr(r, promo)) return `${jourL(p.jour)} (${r.nom})`;
+      const side = sideDe(p, r);
+      return side && contientIngr(accDe(side), promo) ? `${jourL(p.jour)} (accompagnement : ${side.nom})` : "";
+    }).filter(Boolean);
+    if (vus.length) return "au menu " + vus.join(", ");
+    if (!recettesAvec(promo).length && !ACC().some((a) => contientIngr(a, promo))) return "aucun plat ni accompagnement de ta base n'en contient";
+    return "pas au menu cette semaine (aucun jour libre ne l'accepte)";
   }
   function sectionExclus() {
     let h = `<p class="hint">Une recette contenant un de ces ingrédients ne sera jamais proposée. ${nbDisponibles()}/${RECIPES.length} recettes disponibles.</p>
@@ -1761,7 +1883,12 @@
     }
     if (t.id === "btn-add-promo") {
       const inp = document.getElementById("new-promo");
-      if (ajouterPromo(inp.value)) { inp.value = ""; renderReglages(); toast("Promo ajoutée — régénère le menu"); }
+      const v = (inp.value || "").trim();
+      if (ajouterPromo(v)) {
+        // v45 : proposée tout de suite dans la semaine en cours, sans retirer le menu au sort
+        if (state.semaine && rangDe(state.semaine) === rangCourant()) { appliquerPromos(state.semaine, true); save("semaine"); }
+        inp.value = ""; renderReglages(); toast(`Promo ajoutée : ${v} ${ouEstPromo(v)}`);
+      }
       else toast("Déjà dans la liste");
       return;
     }
@@ -1979,7 +2106,9 @@
       save("envies");
       // un jour choisi = épingle posée d'avance : elle restera « en attente » tant que la
       // recette n'est pas dans la base, puis s'appliquera toute seule au premier menu suivant.
-      if (jour && !s1) { epingler(jour, v); generer(); }
+      // v45 : ce jour seulement ; le reste du menu (et les courses déjà faites) ne bouge pas. Sans menu de la
+      // semaine, on le tire. Recette pas encore dans la base : le jour garde sa proposition en attendant.
+      if (jour && !s1) { epingler(jour, v); if (!state.semaine || rangDe(state.semaine) !== rangCourant()) generer(); else imposerJour(jour, false); }
       if (jour && s1) { epingler(jour, v, true); imposerSuivante(jour); }   // ce jour seulement, cette semaine intacte
       inp.value = ""; if (inpUrl) inpUrl.value = "";
       renderReglages();
@@ -2006,7 +2135,14 @@
       }
       state.envies.splice(+t.dataset.i, 1); save("envies"); return renderReglages();
     }
-    if (act === "unpromo") { state.promos.splice(+t.dataset.i, 1); save("promos"); return renderReglages(); }
+    if (act === "unpromo") {
+      const [retiree] = state.promos.splice(+t.dataset.i, 1);
+      save("promos");
+      // rajoutée plus tard, elle sera de nouveau proposée (v45)
+      const s = state.semaine;
+      if (s && Array.isArray(s.promosVues) && retiree) { s.promosVues = s.promosVues.filter((k) => k !== cleIngr(retiree)); save("semaine"); }
+      return renderReglages();
+    }
     if (act === "preset") {
       const p = (window.CADRE_PRESETS || []).find((x) => x.id === t.dataset.id);
       if (p) {
@@ -2061,7 +2197,8 @@
     exclure: (mot) => { if (!ajouterExclusion(mot)) return 0; return appliquerExclusion(); },
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
-    rafraichir: () => { try { RENDER[vueActive()](); } catch (e) {} recupererAjouts(); },
+    rafraichir: () => { try { appliquerDemandesArrivees(); RENDER[vueActive()](); } catch (e) {} recupererAjouts(); },
+    appliquerDemandesArrivees, appliquerPromos, promoDe,
     ajoutsEnAttente,
   };
 

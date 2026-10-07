@@ -112,6 +112,14 @@ p.empty { font-family: var(--serif); font-style: italic; text-align: center; col
 .bilan .niv { white-space: nowrap; margin: 0 4px; }
 .bilan .nd { display: block; font-family: var(--serif); font-style: italic; font-size: .72rem; color: var(--mut); }
 /* échelle à 3 € : les atteints en plein, les autres pâles */
+/* v45 : ce qui est en promo cette semaine (plat ou accompagnement proposé) */
+.tag-promo {
+  display: inline-block; font-family: var(--sans); font-style: normal; font-size: .62rem; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ac-ink); background: var(--ac);
+  border-radius: 999px; padding: 1px 7px; vertical-align: 1px;
+}
+.promo-info { font-size: .8rem; color: var(--mut); margin-top: 6px; }
+.promos-semaine { margin: 8px 0 0; padding-left: 18px; font-size: .8rem; color: var(--mut); line-height: 1.45; }
 .prix { font-family: var(--sans); font-style: normal; font-weight: 700; letter-spacing: .03em; color: var(--ac); white-space: nowrap; }
 .prix i { font-style: normal; opacity: .3; }
 .ing-list li.remplace s { opacity: .55; }

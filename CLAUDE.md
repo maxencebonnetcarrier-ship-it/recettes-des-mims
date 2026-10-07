@@ -48,6 +48,9 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `test_envies.js` — envie d'un ingrédient : propositions, plat au menu le jour choisi (ou la semaine
   prochaine si le jour est passé), « Changer » garde l'ingrédient, un vrai nom de plat reste imposé,
   et un plat demandé pour un jour passé est imposé ce jour-là la semaine prochaine.
+- `test_demandes.js` — plat demandé pour un jour qui arrive dans la base (v45) : imposé ce jour-là seul, reste du
+  menu et cases cochées intacts, jour passé non touché. `test_promos.js` — promos (v45) : patate douce proposée
+  en accompagnement à chaque tirage et étiquetée « Promo », ajout sur un menu existant, ↻, jour passé.
 
 ## Provenance des recettes
 Récupérées depuis **3 sites spécialisés uniquement** : marmiton.org, saveurs-magazine.fr,
@@ -238,6 +241,21 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
   REPORTÉE (`purgerEpingles`) : ce jour cette semaine s'il n'est pas passé, sinon `Jour+1`. L'envie prend la
   semaine visée. Cas du 05/10 : « Gratin ravioles pour mardi » demandé un dimanche depuis une version
   antérieure à la v37, recette ajoutée par le guetteur le lundi ; la demande était effacée.
+- **Plat demandé qui arrive dans la base** (v45, choix du 07/10) : un plat imposé sur un jour (envie de plat avec un
+  jour, ou épingle reçue de l'autre téléphone) s'impose TOUT SEUL ce jour-là dès que sa recette est dans la base
+  (`appliquerDemandesArrivees`, à l'affichage de Semaine et de Courses, et à la synchro), sans retirer au sort le
+  reste du menu : les courses cochées restent justes. Jours passés et jours « fait » non touchés. Si le plat était
+  déjà prévu un autre jour à venir, seul cet autre jour change. Ajouter une envie de plat pour un jour de cette
+  semaine ne retire plus non plus toute la semaine au sort (`imposerJour`). `test_demandes.js`.
+- **Promos** (v45, choix du 07/10 : « me les proposer obli dans la semaine même si c'est pour accompagnement […] en
+  mettant que c'est promo dans l'affichage ») : chaque promo est proposée au moins une fois dans la semaine.
+  Comparée comme un achat (« Patate douce » trouve « patates douces » ; avant, non). Dans l'ordre : un plat ou un
+  accompagnement du menu qui en contient déjà (le tirage favorise les plats en promo, `pickSide` les accompagnements
+  en promo), sinon un accompagnement qui en contient proposé un jour dont le plat l'accepte (ni le menu ni les
+  courses ne changent), sinon un plat qui en contient sur un jour libre. Une promo ajoutée s'applique tout de suite à
+  la semaine en cours. Étiquette « Promo » sur le plat et sur l'accompagnement ; Réglages › Promos dit où chacune
+  est au menu, ou qu'aucun plat ni accompagnement n'en contient. `promosVues` (dans la semaine) : changer
+  l'accompagnement à la main ne la fait pas revenir de force. `test_promos.js`.
 - **Titres** : `nettoyer_nom` (build_data.py) retire aussi « : la recette » (Journal des Femmes) et met une
   majuscule initiale (fiches Marmiton en minuscules). Aucun nom déjà en base n'en a été changé (05/10).
 - **Envie d'un ingrédient** (v36, Réglages › Mes envies) : un mot présent dans les ingrédients de la base
