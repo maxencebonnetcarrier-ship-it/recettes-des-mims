@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 46;
+  const VERSION_APP = 47;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -323,17 +323,21 @@
   /* Choisit une recette en évitant la même protéine plus de 2x dans la semaine, et une saveur déjà utilisée.
      Deux jours de suite avec la même protéine sont permis (v43, choix du 07/10 : « on s'en fiche 2 jours de
      suite poisson par exemple, pas besoin d'alerter ») : le quota de 2 par semaine reste.
-     `garder` (facultatif) ne retient que certaines recettes : envie d'un ingrédient (v36). */
+     `garder` (facultatif) ne retient que certaines recettes : envie d'un ingrédient (v36).
+     JAMAIS un plat déjà posé un autre jour de la semaine (v47) : avant, seuls les plats des 3 semaines passées
+     étaient écartés, et deux jours dont les styles se recoupent (volaille lundi, sport vendredi) pouvaient
+     servir le même plat (cas du 07/10 : « Volaille aux endives et au curry » lundi et vendredi). */
   function choisir(cadre, interdites, plan, idx, garder) {
     const compteProt = {};
     plan.forEach((p, i) => { if (p && i !== idx) compteProt[p.proteine] = (compteProt[p.proteine] || 0) + 1; });
     const saveursVues = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.saveur).filter(Boolean));
-    const garde = garder || (() => true);
+    const dejaSemaine = new Set(plan.filter((p, i) => p && i !== idx).map((p) => p.nom));
+    const garde = (r) => !dejaSemaine.has(r.nom) && (!garder || garder(r));
 
     let pool = candidats(cadre, interdites).filter(garde);
     if (!pool.length) {
-      // Repli : on relâche la saison et l'anti-répétition, JAMAIS le temps ni la protéine —
-      // sinon un jour « Express ≤15 min » pourrait servir un mijoté de 3 h.
+      // Repli : on relâche la saison et l'anti-répétition sur 3 semaines, JAMAIS le temps ni la protéine —
+      // sinon un jour « Express ≤15 min » pourrait servir un mijoté de 3 h — ni les plats de CETTE semaine.
       pool = RECIPES.filter((r) =>
         cadre.cats.includes(r.cat) && !estExclu(r) &&
         (!cadre.maxMin || (r.total_min || 0) <= cadre.maxMin) &&
@@ -618,6 +622,12 @@
       });
       state.semaine = { num: sem.num, an: sem.an, plan, promosVues: state.suivante.promosVues };
       state.suivante = null; save("suivante");
+      // v47 : le plat imposé était déjà prévu un autre jour : cet autre jour change, les autres non (courses
+      // faites d'avance). regenJour écarte les plats de la semaine et ne touche pas un jour imposé.
+      plan.forEach((p) => {
+        if (!p || p.epingle) return;
+        if (plan.some((q) => q !== p && q && q.epingle && q.nom === p.nom)) regenJour(p.jour, state.semaine);
+      });
       appliquerEnviesIngredient(state.semaine);
       appliquerPromos(state.semaine, false);     // courses faites d'avance : seul un accompagnement peut changer
       rafraichirAlertes();                       // protéines voisines + enregistre la semaine

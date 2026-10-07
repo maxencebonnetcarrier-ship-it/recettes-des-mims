@@ -19,6 +19,11 @@
     // aucun avertissement « deux jours de suite » (retiré en v43)
     plan.forEach((p) => { if (p.protAlerte) res.echecs.push(`run ${k}: ${p.jour} porte encore un avertissement de protéine`); });
 
+    // RÈGLE (v47) : jamais deux fois le même plat dans la semaine (hors deux jours imposés par l'utilisateur)
+    const vus = {};
+    plan.forEach((p) => { if (!p.epingle) vus[p.nom] = (vus[p.nom] || 0) + 1; });
+    Object.entries(vus).forEach(([nom, n]) => { if (n > 1) res.echecs.push(`run ${k}: « ${nom} » ${n} fois dans la semaine`); });
+
     // RÈGLE : une protéine pas plus de 3x dans la semaine
     const c = {};
     plan.forEach((p) => { c[p.proteine] = (c[p.proteine] || 0) + 1; });

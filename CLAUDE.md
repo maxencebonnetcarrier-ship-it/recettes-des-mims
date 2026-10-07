@@ -54,6 +54,9 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `test_accompagnement.js` — « Version avec … » de l'accompagnement (v46) : féculents du plat barrés, ingrédients
   pour 4 parts et étapes, bouton pour la prendre. `test_fait_le.js` — « Je l'ai fait » avec une date dans
   Recettes (v46) : historique, note, doublon et date à venir refusés, plat prévu du jour non marqué à tort.
+- `test_doublons.js` — jamais deux fois le même plat dans la semaine (v47) : styles qui se recoupent (volaille
+  lundi, sport vendredi), repli quand un style n'a plus rien de neuf, « ↻ Changer », S+1 devenue le menu avec un
+  plat imposé déjà prévu un autre jour.
 
 ## Provenance des recettes
 Récupérées depuis **3 sites spécialisés uniquement** : marmiton.org, saveurs-magazine.fr,
@@ -194,6 +197,10 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
 - Pas deux fois la même recette sur 3 semaines. Le dernier menu affiché d'une semaine terminée compte
   d'office (champ `servis`, partagé par la synchro) : la règle ne dépend pas de « Marquer fait ».
   L'historique « Marquer fait » compte aussi, mais n'est jamais rempli automatiquement.
+- **Jamais deux fois le même plat dans la semaine** (v47) : `choisir` écarte les plats déjà posés les autres jours,
+  repli compris. Avant, deux jours dont les styles se recoupent (volaille lundi, sport vendredi) pouvaient servir
+  le même plat (cas du 07/10 : « Volaille aux endives et au curry » lundi et vendredi). Seule exception : deux
+  jours où l'utilisateur a imposé le même plat.
 - Légumes de saison (saison déduite du mois courant).
 - Pas deux fois la même saveur dominante dans la semaine.
 - **Exclusions** : `EXCLUS_DEFAUT` (abats, **tomate crue**, champignon, sucré-salé) + celles que
