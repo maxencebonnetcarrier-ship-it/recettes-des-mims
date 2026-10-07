@@ -119,6 +119,13 @@ p.empty { font-family: var(--serif); font-style: italic; text-align: center; col
   border-radius: 999px; padding: 1px 7px; vertical-align: 1px;
 }
 .promo-info { font-size: .8rem; color: var(--mut); margin-top: 6px; }
+/* v46 : version du repas avec l'accompagnement, et « Je l'ai fait » de l'onglet Recettes */
+.detail.alt { margin-top: 14px; padding-top: 6px; border-top: 1px solid var(--ln); }
+.detail.alt .pris { margin-top: 12px; }
+.ing-list em.aussi { font-size: .72rem; color: var(--soft); white-space: nowrap; }
+.fait-le { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--ln); }
+.fait-le .add-row { margin: 6px 0 0; }
+.fait-le .add-row input { flex: 1; min-width: 0; }
 .promos-semaine { margin: 8px 0 0; padding-left: 18px; font-size: .8rem; color: var(--mut); line-height: 1.45; }
 .prix { font-family: var(--sans); font-style: normal; font-weight: 700; letter-spacing: .03em; color: var(--ac); white-space: nowrap; }
 .prix i { font-style: normal; opacity: .3; }

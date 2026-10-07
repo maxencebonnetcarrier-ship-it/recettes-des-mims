@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 45;
+  const VERSION_APP = 46;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -204,8 +204,12 @@
      riz, pâtes…), qui sortent de la liste. Un plat dont le NOM contient déjà son féculent
      (« Tajine… et pommes de terre », « Penne au poulet ») n'en reçoit pas. */
   const FECULENT = /\b(pommes? de terre|riz|pates?|penne|spaghetti|tagliatelles?|nouilles?|semoule|boulgour|quinoa|patates? douces?|puree)\b/;
-  const estFeculent = (nom) => FECULENT.test(brut(nom));
-  const platComplet = (r) => FECULENT.test(brut(r.nom));
+  // v46 : pas un féculent malgré le mot : pâte de curry, pâte feuilletée ou à pizza (pâte AU SINGULIER : une pâte, pas
+  // des pâtes), purée de tomate, fécule. Avant, prendre l'accompagnement les retirait des courses (constaté le 07/10).
+  const PAS_FECULENT = /\b(pate (de|d|a|au|aux|brisee|feuilletee|sablee|filo|phyllo)|pates (feuilletees|brisees|sablees)|puree (de )?tomates?|fecule|en une pate|concentre)\b/;
+  const aFeculent = (t) => FECULENT.test(t) && !PAS_FECULENT.test(t);
+  const estFeculent = (nom) => aFeculent(brut(nom));
+  const platComplet = (r) => aFeculent(brut(r.nom));
   const sideDe = (p, r) => (p && p.side && r && !platComplet(r) ? p.side : null);
   const sidePris = (p, r) => !!(sideDe(p, r) && p.sideChoisi);
   const accDe = (side) => (side ? ACC().find((a) => a.nom === side.nom) : null);
@@ -1084,12 +1088,17 @@
     if (ouverts.size) el.querySelectorAll("details[data-cle]").forEach((d) => { if (ouverts.has(d.dataset.cle)) d.open = true; });
   }
 
-  // entrée d'historique du jour « jour » de la semaine « semaine » (même année ET même numéro)
-  const entreeHistorique = (semaine, jour) => {
+  // entrée d'historique du jour « jour » de la semaine « semaine » (même année ET même numéro). Avec `nom`, celle
+  // de CE plat (v46) : un plat noté « fait » depuis l'onglet Recettes un jour où le menu prévoyait autre chose ne
+  // doit pas faire paraître cuisiné le plat prévu. Sans `nom` : un plat (n'importe lequel) a été cuisiné ce jour-là.
+  const entreeHistorique = (semaine, jour, nom) => {
     const rang = rangDe(semaine);
-    return state.historique.find((h) => h.jour === jour && rangDe(h) === rang);
+    return state.historique.find((h) => h.jour === jour && rangDe(h) === rang && (!nom || h.nom === nom));
   };
-  const estFait = (semaine, jour) => { const h = entreeHistorique(semaine, jour); return !!(h && h.fait); };
+  const estFait = (semaine, jour, nom) => {
+    const rang = rangDe(semaine);
+    return state.historique.some((h) => h.fait && h.jour === jour && rangDe(h) === rang && (!nom || h.nom === nom));
+  };
 
   function btnFavori(nom) {
     const on = estFavori(nom);
@@ -1131,10 +1140,45 @@
         ${etapes ? `<p class="det-t">Préparation</p><ol class="step-list">${etapes}</ol>` : ""}
         ${r.url ? `<a class="src" href="${esc(r.url)}" target="_blank" rel="noopener">Voir sur ${esc(r.source || "le site")} ↗</a>` : ""}`;
   }
-  const blocRecette = (r, cle, fin, remplacePar) => `<details class="detail" data-cle="${esc(cle)}">
+  // apres : la partie accompagnement (v46), entre la recette et la fin
+  const blocRecette = (r, cle, fin, remplacePar, apres) => `<details class="detail" data-cle="${esc(cle)}">
       <summary>Ingrédients, étapes &amp; source</summary>
-      <div class="det-body">${corpsRecette(r, remplacePar)}${fin || ""}</div>
+      <div class="det-body">${corpsRecette(r, remplacePar)}${apres || ""}${fin || ""}</div>
     </details>`;
+
+  /* v46 : le repas AVEC son accompagnement, ajusté à la recette de base (choix du 07/10 : « mettre recette
+     alternative avec l'accompagnement en idée en ajustant avec la recette de base »). Les féculents du plat qu'il
+     remplace sont barrés avec leur quantité, puis viennent ses ingrédients POUR 4 PARTS (comme le plat) et ses
+     étapes ; un ingrédient déjà acheté pour le plat est signalé. Accompagnement pris : affiché d'office. Simple idée :
+     une « version avec … » dépliable, et un bouton pour la prendre (elle entre alors dans les courses). */
+  function blocAccompagnement(r, side, pris, cle, jour) {
+    const a = accDe(side);
+    if (!a) return "";
+    const fq = (i, parts) => (i.qte ? `${Math.round(i.qte * PARTS_CIBLE / (parts || PARTS_CIBLE) * 10) / 10}${i.unite ? " " + i.unite : ""} ` : "");
+    // achat commun au plat et à l'accompagnement, hors épicerie (sel, poivre, huile : on en a toujours) et hors
+    // féculents que l'accompagnement remplace (les pommes de terre du plat ne sont plus achetées pour lui)
+    const dansPlat = new Set(r.ingredients.filter((i) => i.rayon !== "Épicerie" && !estFeculent(i.nom)).map((i) => achat(i.nom).cle));
+    const remplaces = r.ingredients.filter((i) => estFeculent(i.nom));
+    const ingr = a.ingredients.map((i) => `<li><span class="iq">${esc(fq(i, a.parts_origine))}</span><span>${esc(i.nom)}${
+      i.rayon !== "Épicerie" && dansPlat.has(achat(i.nom).cle) ? ` <em class="aussi">aussi dans le plat</em>` : ""}</span></li>`).join("");
+    const etapes = (a.etapes || []).map((e) => `<li>${esc(e)}</li>`).join("");
+    const corps = `<p class="det-t">Accompagnement : ${esc(a.nom)} · pour ${PARTS_CIBLE} parts</p>
+        <ul class="ing-list acc-ing">${ingr}</ul>
+        ${etapes ? `<p class="det-t">Préparation de l'accompagnement</p><ol class="step-list">${etapes}</ol>` : ""}
+        ${a.url ? `<a class="src" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.nom)} sur ${esc(a.source || "le site")} ↗</a>` : ""}`;
+    if (pris) return corps;
+    const ajuste = remplaces.length
+      ? `<p class="det-t">Le plat, ajusté</p>
+        <ul class="ing-list">${remplaces.map((i) => `<li class="remplace"><span class="iq">${esc(fq(i, r.parts_origine))}</span><span class="in"><s>${esc(i.nom)}</s> <em>→ ${esc(a.nom)}</em></span></li>`).join("")}</ul>
+        <p class="plus">Le reste du plat ne change pas.</p>`
+      : `<p class="plus">Le plat ne change pas : ${esc(a.nom)} s'y ajoute.</p>`;
+    return `<details class="detail alt" data-cle="${esc(cle)}">
+        <summary>Version avec ${esc(a.nom)}</summary>
+        <div class="det-body">${ajuste}${corps}
+          <button class="pris" data-act="choisir-side" data-jour="${esc(jour)}">+ Prendre cette version (ajoutée aux courses)</button>
+        </div>
+      </details>`;
+  }
 
   // les épingles ne valent que pour la semaine courante : jamais montrées sur S+1 (v36)
   const epingleDuJour = (jour, s) => (!s ? null : nomEpingle(jour, s !== state.semaine));
@@ -1147,7 +1191,7 @@
   // durée, accompagnement, p'tit plus, lien et boutons du plat d'un jour
   function corpsJour(p, r, cadre, s) {
     const s1 = s !== state.semaine;               // semaine prochaine : rien n'est encore cuisiné
-    const fait = !s1 && estFait(s, p.jour);
+    const fait = !s1 && estFait(s, p.jour, r.nom);
     const attendu = epingleDuJour(cadre.jour, s);
     let alerte = "";
     if (p.envie && !p.epingle) {
@@ -1186,7 +1230,8 @@
         ${btnFavori(r.nom)}
       </div>
       ${blocRecette(r, (s1 ? "ing-s1-" : "ing-") + p.jour, `<p class="style-jour">Style du jour : ${esc(cadre.note)}</p>
-        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`, pris ? side.nom : null)}`;
+        <div class="note-row">Ta note : ${etoiles(r.nom)}</div>`, pris ? side.nom : null,
+        side ? blocAccompagnement(r, side, pris, (s1 ? "alt-s1-" : "alt-") + p.jour, p.jour) : "")}`;
   }
   // jour sans plat : demande en attente, ou aucun plat possible
   function corpsJourVide(cadre, s) {
@@ -1477,6 +1522,7 @@
               ${detail ? `<p class="plus">${fmtDuree(dureeTotale(r))} : ${detail}</p>` : ""}
               ${r.bonus ? `<p class="plus">Le p'tit plus : ${esc(r.bonus)}</p>` : ""}
               ${corpsRecette(r)}
+              ${blocFait(r)}
             </div>
           </details>
           ${btnFavori(r.nom)}
@@ -1497,6 +1543,44 @@
     s.addEventListener("input", filtrer);
     // un redessin (cœur, note, exclusion) ne doit pas effacer la recherche en cours
     if (recherche) { s.value = recherche; filtrer(); }
+  }
+
+  /* v46 : un plat cuisiné hors du menu, ou un autre jour que prévu, se note depuis l'onglet Recettes avec sa date
+     (choix du 07/10 : « pouvoir aller dans les recettes et mettre déjà fait avec la date si je l'ai pas fait dans la
+     semaine comme le gratin ravioles, puis pouvoir le noter »). Il entre dans l'historique comme « Marquer fait » :
+     il ne revient pas avant 3 semaines, il se note, et un plat demandé ainsi cuisiné n'est plus reporté. */
+  const isoJour = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // « mardi 6 oct. » pour une entrée d'historique
+  function dateHistorique(h) {
+    const sem = semaineDuRang(rangDe(h)), i = JOURS.indexOf(h.jour);
+    const d = lundiSemaineISO(sem.num, sem.an);
+    d.setUTCDate(d.getUTCDate() + Math.max(0, i));
+    return `${i >= 0 ? JOURS_LONG[i].toLowerCase() + " " : ""}${d.getUTCDate()} ${MOIS[d.getUTCMonth()]}`;
+  }
+  function blocFait(r) {
+    const faits = state.historique.filter((h) => h.fait && h.nom === r.nom && rangDe(h) !== null)
+      .sort((a, b) => rangDe(b) - rangDe(a) || JOURS.indexOf(b.jour) - JOURS.indexOf(a.jour));
+    const auj = isoJour(new Date());
+    return `<div class="fait-le">
+        ${faits.length ? `<p class="plus">Cuisiné ${faits.slice(0, 3).map((h) => `le ${esc(dateHistorique(h))}`).join(", ")}${faits.length > 3 ? "…" : ""}</p>` : ""}
+        ${faits.length || state.notes[r.nom] ? `<div class="note-row">Ta note : ${etoiles(r.nom)}</div>` : ""}
+        <div class="add-row"><input type="date" class="date-fait" value="${auj}" max="${auj}" aria-label="Date où tu l'as cuisiné" />
+          <button data-act="fait-le" data-nom="${esc(r.nom)}">✓ Je l'ai fait</button></div>
+      </div>`;
+  }
+  function noterFaitLe(nom, iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || isoJour(new Date()));
+    if (!m) return "Date illisible";
+    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+    if (isoJour(d) > isoJour(new Date())) return "Cette date n'est pas encore passée";
+    const sem = semaineDe(d), jour = JOURS[(d.getDay() + 6) % 7];
+    const h = entreeHistorique(sem, jour, nom);
+    const quand = dateHistorique({ an: sem.an, num: sem.num, jour });
+    if (h && h.fait) return `Déjà noté : cuisiné le ${quand}`;
+    if (h) h.fait = true;
+    else state.historique.push({ num: sem.num, an: sem.an, jour, nom, fait: true, note: state.notes[nom] || 0 });
+    save("historique");
+    return null;
   }
 
   function renderHistorique() {
@@ -2006,12 +2090,21 @@
     if (act === "unexclude") { state.exclusions.splice(+t.dataset.i, 1); save("exclusions"); return renderReglages(); }
     if (act === "fait") {
       const sem = semaineDuRang(rangDe(state.semaine)), jour = t.dataset.jour, nom = t.dataset.nom;
-      const h = entreeHistorique(state.semaine, jour);
+      const h = entreeHistorique(state.semaine, jour, nom);
       // l'année est (ré)écrite à chaque passage : une entrée de l'ancien format se met à niveau
       if (h) { h.fait = !h.fait; h.nom = nom; h.num = sem.num; h.an = sem.an; }
       else state.historique.push({ num: sem.num, an: sem.an, jour, nom, fait: true, note: state.notes[nom] || 0 });
       save("historique"); renderSemaine();
       return;
+    }
+    if (act === "fait-le") {
+      const bloc = t.closest(".fait-le");
+      const champ = bloc && bloc.querySelector(".date-fait");
+      const nom = t.dataset.nom;
+      const refus = noterFaitLe(nom, champ && champ.value);
+      if (refus) return toast(refus);
+      RENDER[vueActive()]();
+      return toast(`✓ ${nom} : noté fait. Tu peux le noter juste en dessous.`);
     }
     if (act === "note") {
       const nom = t.dataset.nom, val = parseFloat(t.dataset.val);
@@ -2198,7 +2291,7 @@
     getState: () => state,
     sauver: () => localStorage.setItem(STORE, JSON.stringify(state)),   // sans re-signaler (évite les boucles de synchro)
     rafraichir: () => { try { appliquerDemandesArrivees(); RENDER[vueActive()](); } catch (e) {} recupererAjouts(); },
-    appliquerDemandesArrivees, appliquerPromos, promoDe,
+    appliquerDemandesArrivees, appliquerPromos, promoDe, noterFaitLe,
     ajoutsEnAttente,
   };
 

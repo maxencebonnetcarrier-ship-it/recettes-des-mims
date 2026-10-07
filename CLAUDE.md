@@ -51,6 +51,9 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `test_demandes.js` — plat demandé pour un jour qui arrive dans la base (v45) : imposé ce jour-là seul, reste du
   menu et cases cochées intacts, jour passé non touché. `test_promos.js` — promos (v45) : patate douce proposée
   en accompagnement à chaque tirage et étiquetée « Promo », ajout sur un menu existant, ↻, jour passé.
+- `test_accompagnement.js` — « Version avec … » de l'accompagnement (v46) : féculents du plat barrés, ingrédients
+  pour 4 parts et étapes, bouton pour la prendre. `test_fait_le.js` — « Je l'ai fait » avec une date dans
+  Recettes (v46) : historique, note, doublon et date à venir refusés, plat prévu du jour non marqué à tort.
 
 ## Provenance des recettes
 Récupérées depuis **3 sites spécialisés uniquement** : marmiton.org, saveurs-magazine.fr,
@@ -256,6 +259,20 @@ le chiffre de la source est inconnue). Il dit « N sans prix » et « sur N plat
   la semaine en cours. Étiquette « Promo » sur le plat et sur l'accompagnement ; Réglages › Promos dit où chacune
   est au menu, ou qu'aucun plat ni accompagnement n'en contient. `promosVues` (dans la semaine) : changer
   l'accompagnement à la main ne la fait pas revenir de force. `test_promos.js`.
+- **Version avec l'accompagnement** (v46, choix du 07/10 : « recette alternative avec l'accompagnement en idée en
+  ajustant avec la recette de base ») : dans « Ingrédients, étapes & source » d'un jour, une « Version avec … »
+  dépliable barre les féculents du plat qu'il remplace (avec leur quantité), donne ses ingrédients pour 4 parts
+  (« aussi dans le plat » quand l'achat est commun) et ses étapes, et un bouton la prend (courses). Prise, elle est
+  affichée d'office.
+  Féculent (ce que l'accompagnement remplace, dans la version et dans les courses) : plus « pâte de curry »,
+  « purée de tomate », « fécule » ni « pâte feuilletée » (`PAS_FECULENT`, v46) ; avant, prendre l'accompagnement
+  les retirait des courses.
+- **« Je l'ai fait » dans Recettes** (v46, choix du 07/10 : « mettre déjà fait avec la date si je l'ai pas fait
+  dans la semaine comme le gratin ravioles, puis pouvoir le noter ») : chaque fiche a un champ de date (aujourd'hui
+  par défaut, jamais dans le futur) et « ✓ Je l'ai fait ». L'entrée va dans l'historique (année, semaine, jour de
+  cette date), puis la fiche dit « Cuisiné le mardi 6 oct. » et montre les étoiles. Le plat ne revient pas avant
+  3 semaines. L'historique reconnaît désormais un plat cuisiné à son NOM (`estFait(semaine, jour, nom)`) : un autre
+  plat noté le même jour ne fait plus paraître cuisiné le plat prévu.
 - **Titres** : `nettoyer_nom` (build_data.py) retire aussi « : la recette » (Journal des Femmes) et met une
   majuscule initiale (fiches Marmiton en minuscules). Aucun nom déjà en base n'en a été changé (05/10).
 - **Envie d'un ingrédient** (v36, Réglages › Mes envies) : un mot présent dans les ingrédients de la base
