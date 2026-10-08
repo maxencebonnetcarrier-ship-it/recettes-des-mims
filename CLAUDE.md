@@ -59,6 +59,9 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
   plat imposé déjà prévu un autre jour.
 - v50 : `test_lien.js` — envie avec un lien et un homonyme dans la base : l'homonyme en attendant, la recette du lien
   dès son arrivée (jour imposé, épingle renommée, reste du menu intact), « mettre l'app à jour » proposé entre-temps.
+  Lien FICTIF et homonyme pris au hasard dans la base : avec le vrai lien du chili, le test a bloqué la publication
+  du guetteur dès qu'il a ajouté ce chili (08/10). Règle : un test ne cite jamais un plat ou un lien réel qu'un
+  guetteur pourrait ajouter.
 - v48 : `test_changer.js` (« ↻ Changer » sans revenir sur un plat déjà proposé, « Peu importe » compris ; nouveaux menus
   variés ; un favori noté 5/5 sort plus souvent), `test_retrait.js` (✕ = retiré de la recette seule, « Remettre »,
   alerte d'exclusion levée, partage avec l'autre téléphone par un faux hub), `test_quantites.js` (règle d'arrondi, et
