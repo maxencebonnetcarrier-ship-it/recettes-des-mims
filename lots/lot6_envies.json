@@ -208,5 +208,127 @@
   "saison": "Toute l'année",
   "tags": [],
   "kcal_part": 450
+ },
+ {
+  "nom": "Lasagnes bolognaise",
+  "url": "https://cuisine.journaldesfemmes.fr/recette/313738-lasagnes-a-la-bolognaise",
+  "prep_min": 20,
+  "cuisson_min": 60,
+  "total_min": 80,
+  "parts_origine": 6,
+  "etapes": [
+   "Couper un oignon et une gousse d'ail en petit morceaux. Les faire revenir à feu doux dans une casserole ou une sauteuse avec une cuillère à soupe d'huile d'olive, jusqu'à ce que les oignons soient devenus un peu translucides. Afin d'exhaler les saveurs de l'oignon, démarrer la cuisson à feu vif pendant 1 à 2 minutes. Puis baisser le feu juste après pour ne pas que les oignons ne brûlent.",
+   "Une fois que les oignons ont pris une jolie couleur dorée, ajouter 800 g de pulpe de tomate. Saler, poivrer et ajouter une bonne cuillère à soupe d'herbes aromatiques (au choix : origan, basilic, thym). Laisser réduire et mijoter à feu doux pendant 20 minutes, avant de mixer ou non selon les goûts. Contrairement aux tomates fraîches, la pulpe en conserve étant plutôt acide, penser à ajouter 2 morceaux de sucre pour adoucir la sauce.",
+   "Pendant que la sauce mijote, faire chauffer un peu d'huile d'olive dans une poêle pour y faire revenir 300 g de viande de bœuf hachée à feu moyen pendant 3 à 5 minutes. Saler et poivrer, puis la mélanger à la sauce tomate réservée. Penser à dégraisser la viande avant de la mélanger à la sauce tomate. Pour cela, retirer la viande à l'aide d'une écumoire.",
+   "Dans une casserole, faire fondre 70 g de beurre, et ajouter la même quantité de farine hors du feu. Mélanger pour que le beurre soit absorbé. Ajouter 50 cl de lait très progressivement en mélangeant pour empêcher la formation de grumeaux. Replacer sur feu doux et laisser épaissir pendant quelques minutes. Saler, poivrer et ajouter une bonne pincée de noix de muscade.",
+   "Beurrer un plat, et y déposer une couche de béchamel, puis une couche de lasagnes, et une de sauce tomate à la viande parsemée d'emmental râpé. Répéter l'opération jusqu'à épuisement des ingrédients en terminant par de la béchamel, et saupoudrer avec du parmesan râpé. Les amateurs peuvent aussi ajouter des lamelles de champignons de Paris au moment du montage.",
+   "Enfourner à four préchauffé à 165°c (thermostat 5/6) pendant 45 minutes environ, pour que les lasagnes soient bien gratinées. Si les lasagnes gratinent trop vite, les recouvrir de papier d'aluminium."
+  ],
+  "source": "Journal des Femmes",
+  "ingredients": [
+   {
+    "nom": "plaque de lasagnes",
+    "qte": 8,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "pulpe de tomate en conserve",
+    "qte": 800,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "boeuf hachée",
+    "qte": 300,
+    "unite": "g",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "oignon",
+    "qte": 1,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "ail",
+    "qte": 1,
+    "unite": "gousse",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "huile d'olive",
+    "qte": 2,
+    "unite": "c à s",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "herbes aromatiques au choix",
+    "qte": 1,
+    "unite": "c à s",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "emmental râpé",
+    "qte": 100,
+    "unite": "g",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "sucre",
+    "qte": 2,
+    "unite": "morceau",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "beurre",
+    "qte": 70,
+    "unite": "g",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "farine",
+    "qte": 70,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "lait",
+    "qte": 50,
+    "unite": "cl",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "noix de muscade",
+    "qte": 1,
+    "unite": "pincée",
+    "rayon": "Épicerie"
+   }
+  ],
+  "photo": "https://img-3.journaldesfemmes.fr/7cKtDqAZDKEgaM2cPEJQGF1ZeUU=/750x500/5d2f6459db3b46909301042b3ec88c17/ccmcms-jdf/39905461.jpg",
+  "video": "https://media.ccmbg.com/vc/1621529055/7765947554/906155.mp4",
+  "proteine": "bœuf",
+  "cuissons": [
+   "casserole",
+   "sauteuse",
+   "poêle",
+   "four"
+  ],
+  "cat": "Mijoté",
+  "saison": "Toute l'année",
+  "tags": [],
+  "demande": true
  }
 ]
