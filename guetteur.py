@@ -151,6 +151,29 @@ def envies_du_hub(state):
     return out
 
 
+def url_cle(u):
+    """Adresse comparable : sans protocole, paramètres, ancre ni barre finale, en minuscules."""
+    u = str(u or "").strip().lower()
+    u = re.sub(r"^https?://", "", u)
+    return re.sub(r"[?#].*$", "", u).rstrip("/")
+
+
+def meme_url(a, b):
+    return bool(a) and bool(b) and url_cle(a) == url_cle(b)
+
+
+def recette_envie(e, recettes, statuts=None):
+    """La recette qui satisfait une envie. v50 (choix du 08/10 : « un lien que je donne passe toujours devant la recette
+    de même nom déjà dans la base ») : une envie AVEC un lien n'est satisfaite que par la recette de CE lien. Avant,
+    « Chili con carne » avec un lien Marmiton était tenue pour trouvée parce qu'un autre chili portait ce nom, et le
+    lien n'était jamais lu. Sans lien : titre exact, recette liée par le PC, puis le nom (recette_liee)."""
+    if isinstance(e, str):
+        e = {"nom": e}
+    if e.get("url"):
+        return next((r for r in recettes if meme_url(r.get("url"), e["url"])), None)
+    return recette_liee(e.get("nom") or "", recettes, statuts)
+
+
 def envies_a_chercher(envies, recettes, journal, maintenant, statuts=None):
     """Plats demandés, absents de la base, pas déjà tentés trop récemment."""
     todo, vus = [], set()
@@ -161,7 +184,7 @@ def envies_a_chercher(envies, recettes, journal, maintenant, statuts=None):
         if not nom or e.get("type") == "ingredient" or norm(nom) in vus:
             continue
         vus.add(norm(nom))
-        if recette_liee(nom, recettes, statuts):
+        if recette_envie(e, recettes, statuts):
             continue
         j = journal.get(norm(nom))
         if j and maintenant - j.get("dernier", 0) < RELANCE.get(j.get("resultat"), 0):
@@ -185,7 +208,7 @@ def etat_envies(envies, recettes, journal, maintenant, statuts=None):
         if e.get("type") == "ingredient":
             out.append((lib, "ingrédient : l'app choisit elle-même un plat de ta base qui en contient", False))
             continue
-        r = recette_liee(nom, recettes, statuts)
+        r = recette_envie(e, recettes, statuts)
         if r:
             out.append((lib, f"déjà dans ta base : {r['nom']}", False))
             continue
@@ -231,7 +254,7 @@ def statuts_retrouves(statuts, envies, recettes, maintenant):
     for e in envies:
         nom = e["nom"] if isinstance(e, dict) else e
         s = statuts.get(norm(nom))
-        r = recette_liee(nom, recettes, statuts)
+        r = recette_envie(e, recettes, statuts)
         if s and r and s.get("etat") != "ajoutee":
             statuts[norm(nom)] = statut(s.get("nom") or nom, "ajoutee", recette=r["nom"], maintenant=maintenant)
 
@@ -650,18 +673,26 @@ def chercher(envie, connus, urls_connues, noms_connus, plans):
     """Rend (recette ou None, résultat, détail)."""
     nom = envie["nom"]
     if envie.get("url"):  # lien fourni par l'utilisateur : toute source acceptée (« recette demandée »)
-        if envie["url"].rstrip("/") in urls_connues:
+        if any(meme_url(u, envie["url"]) for u in urls_connues):
             return None, "refusee", "lien déjà dans les lots"
-        r, refus = choisir_parmi(nom, lire_pages([envie["url"]]), connus, urls_connues, noms_connus, demande=True)
+        # v50 : le lien passe devant une recette de même nom. Le nom n'est donc pas un motif de refus (noms connus
+        # non passés) : il est rendu unique plus bas. Seule l'adresse identifie un doublon.
+        r, refus = choisir_parmi(nom, lire_pages([envie["url"]]), connus, urls_connues, set(), demande=True)
         if not r:
             return None, "refusee", "; ".join(refus) or "page illisible"
         if not trouver_recette(nom, [r]):
             # Lien fourni avec SON nom de plat : sans ce nom, l'épingle du jour (posée avec le texte de
             # l'envie) ne retrouverait jamais la recette. Ingrédients, étapes et source restent ceux de la page.
-            if norm(nom) in noms_connus:
-                return None, "refusee", f"une autre recette s'appelle déjà « {nom} »"
             log(f"« {nom} » : titre de la page « {r['nom']} » remplacé par le nom de l'envie")
             r["nom"] = A.nettoyer_nom(nom)
+        if norm(r["nom"]) in noms_connus:
+            # même nom qu'une recette de la base (cas du 08/10 : « Chili con carne ») : « (ton lien) » la distingue,
+            # et survit au nettoyage des titres de build_data.py. L'app la retrouve par son adresse.
+            base, k = r["nom"], 1
+            while norm(r["nom"]) in noms_connus:
+                r["nom"] = f"{base} (ton lien{'' if k == 1 else ' ' + str(k)})"
+                k += 1
+            log(f"« {nom} » : une autre recette s'appelle déjà « {base} », celle de ton lien devient « {r['nom']} »")
         return r, "ajoutee", r["url"]
     exclues, tous_refus = [], []
     # 1) adresses avec TOUS les mots du plat
@@ -765,7 +796,7 @@ def passe(essai=False, plat=None):
             return 0
         recettes = recettes_de_la_base()            # la base a pu changer avec la mise à jour
         statuts_retrouves(statuts, envies, recettes, maintenant)
-        todo = [e for e in todo if not recette_liee(e["nom"], recettes, statuts)]
+        todo = [e for e in todo if not recette_envie(e, recettes, statuts)]
         if not todo:
             publier_statuts()
             return 0

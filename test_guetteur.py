@@ -258,6 +258,53 @@ class Elargir(unittest.TestCase):
         self.assertEqual(resultat, "refusee")
 
 
+class Lien(unittest.TestCase):
+    """v50 (choix du 08/10) : un lien fourni passe devant la recette de même nom déjà dans la base. Cas réel :
+    « Chili con carne » demandé avec le lien Marmiton 15415 ; la base avait un autre chili (11046) de ce nom, et
+    le lien n'était jamais lu."""
+    LIEN = M + "chili-con-carne-facile_15415.aspx"
+    BASE = [{"nom": "Chili con carne", "url": M + "chili-con-carne_11046.aspx"}]
+
+    def test_meme_url(self):
+        self.assertTrue(G.meme_url("https://www.marmiton.org/x_1.aspx/", "http://WWW.marmiton.org/x_1.aspx?utm=1#avis"))
+        self.assertFalse(G.meme_url(M + "a_1.aspx", M + "a_2.aspx"))
+        self.assertFalse(G.meme_url(None, M + "a_1.aspx"))
+
+    def test_envie_avec_lien_cherchee_malgre_le_meme_nom(self):
+        e = {"nom": "Chili con carne", "url": self.LIEN, "jour": "Sam"}
+        todo = G.envies_a_chercher([e], self.BASE, {}, time.time())
+        self.assertEqual([(x["nom"], x["url"]) for x in todo], [("Chili con carne", self.LIEN)])
+        self.assertIn("à chercher", G.etat_envies([e], self.BASE, {}, time.time())[0][1])
+        # sans lien, le nom suffit (comportement inchangé)
+        self.assertEqual(G.envies_a_chercher([{"nom": "Chili con carne"}], self.BASE, {}, time.time()), [])
+        # la recette du lien dans la base : plus rien à chercher, c'est elle qui satisfait l'envie
+        base2 = self.BASE + [{"nom": "Chili con carne (ton lien)", "url": self.LIEN}]
+        self.assertEqual(G.envies_a_chercher([e], base2, {}, time.time()), [])
+        self.assertEqual(G.recette_envie(e, base2)["nom"], "Chili con carne (ton lien)")
+        self.assertEqual(G.recette_envie({"nom": "Chili con carne"}, base2)["nom"], "Chili con carne")
+
+    def test_recette_du_lien_prend_un_nom_unique(self):
+        lue = dict(recette_glaneur("Chili con carne facile", self.LIEN, ["boeuf haché", "haricots rouges"]),
+                   prep_min=10, cuisson_min=25, total_min=35)
+        ancien = G.lire_pages
+        G.lire_pages = lambda urls: [lue]
+        try:
+            r, resultat, detail = G.chercher({"nom": "Chili con carne", "url": self.LIEN}, {},
+                                             {self.BASE[0]["url"]}, {"chili con carne"}, {})
+        finally:
+            G.lire_pages = ancien
+        self.assertEqual(resultat, "ajoutee", detail)
+        self.assertEqual(r["nom"], "Chili con carne (ton lien)")
+        self.assertEqual(r["url"], self.LIEN)
+        self.assertTrue(r.get("demande"))
+        self.assertEqual(G.A.nettoyer_nom(r["nom"]), r["nom"])   # le nom survit à build_data.py
+
+    def test_lien_deja_dans_les_lots(self):
+        r, resultat, detail = G.chercher({"nom": "Chili", "url": self.LIEN + "/"}, {}, {self.LIEN}, set(), {})
+        self.assertIsNone(r)
+        self.assertEqual((resultat, detail), ("refusee", "lien déjà dans les lots"))
+
+
 class SansConsole(unittest.TestCase):
     """pythonw (tâche planifiée) : sys.stdout et sys.stderr valent None. Avant la v43, la lecture Glaneur
     écrivait dans sys.stderr et la passe plantait (« 'NoneType' object has no attribute 'write' »)."""

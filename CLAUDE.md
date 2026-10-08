@@ -57,6 +57,8 @@ App web mobile-first de planification de repas hebdomadaire (3 personnes, 4 part
 - `test_doublons.js` — jamais deux fois le même plat dans la semaine (v47) : styles qui se recoupent (volaille
   lundi, sport vendredi), repli quand un style n'a plus rien de neuf, « ↻ Changer », S+1 devenue le menu avec un
   plat imposé déjà prévu un autre jour.
+- v50 : `test_lien.js` — envie avec un lien et un homonyme dans la base : l'homonyme en attendant, la recette du lien
+  dès son arrivée (jour imposé, épingle renommée, reste du menu intact), « mettre l'app à jour » proposé entre-temps.
 - v48 : `test_changer.js` (« ↻ Changer » sans revenir sur un plat déjà proposé, « Peu importe » compris ; nouveaux menus
   variés ; un favori noté 5/5 sort plus souvent), `test_retrait.js` (✕ = retiré de la recette seule, « Remettre »,
   alerte d'exclusion levée, partage avec l'autre téléphone par un faux hub), `test_quantites.js` (règle d'arrondi, et
@@ -148,7 +150,12 @@ ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes d
      qu'imposée sur un jour.
   Le titre retenu peut donc différer du nom écrit : le statut `recette` du hub fait le lien
   (`recette_liee()` du guetteur, `trouverRecette()` de l'app, même ordre : titre exact, recette liée, nom).
-  Les deux comparent les mots au singulier (« Escalopes poulets panées »). Pour un nom d'au moins 3 mots, ils
+  Les deux comparent les mots au singulier (« Escalopes poulets panées »).
+  **Lien fourni** (v50, choix du 08/10 : « un lien que je donne passe toujours devant la recette de même nom déjà
+  dans la base ») : une envie AVEC un lien n'est satisfaite que par la recette de CE lien (`recette_envie` du
+  guetteur, `recetteDuLien` d'`app.js`, adresses comparées sans protocole ni paramètres). Le guetteur la lit même si
+  une recette porte déjà ce nom, et la nomme alors « … (ton lien) » ; l'app la sert à la place de l'homonyme dès
+  son arrivée, en attendant elle sert l'homonyme. Cas réel : « Chili con carne » avec le lien Marmiton 15415. Pour un nom d'au moins 3 mots, ils
   acceptent aussi un titre à UN mot près si ce mot est dans les ingrédients (v43 : « Riz chorizo poivrons » →
   « Riz au chorizo ») ;
 - **ajoute** à `lots/lot6_envies.json`, relève prix et calories, reconstruit `data.js`, monte la version,

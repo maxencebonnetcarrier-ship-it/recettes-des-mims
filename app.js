@@ -5,7 +5,7 @@
   // Numéro de version de l'app. À INCRÉMENTER à chaque déploiement : c'est ce que le bouton
   // « Chercher une mise à jour » compare au fichier servi. Sans ça, une amélioration qui ne
   // touche pas la base de recettes passait inaperçue et l'app restait sur l'ancien code.
-  const VERSION_APP = 49;
+  const VERSION_APP = 50;
 
   const STORE = "mims_state_v2";
   const PARTS_CIBLE = 4; // 3 au soir + 1 midi
@@ -932,8 +932,22 @@
       printanier ») : exiger l'égalité stricte laissait le jour « en attente » pour toujours.
       On accepte donc un nom PARTIEL, mais jamais au hasard : il faut que tous les mots
       demandés soient présents dans le titre, et une seule recette doit correspondre. */
+  /* v50 (choix du 08/10 : « un lien que je donne passe toujours devant la recette de même nom déjà dans la base ») :
+     une envie de plat AVEC un lien est servie par la recette de CE lien, dès qu'elle est dans la base. Avant, le
+     « Chili con carne » demandé avec un lien Marmiton prenait l'autre chili de la base, qui portait ce nom. */
+  const urlCle = (u) => (u || "").toString().trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+  const memeUrl = (a, b) => !!a && !!b && urlCle(a) === urlCle(b);
+  const recetteDuLien = (url) => (url ? RECIPES.find((r) => memeUrl(r.url, url)) || null : null);
+  const lienDeLEnvie = (nom) => {
+    const e = (state.envies || []).find((x) => x && typeof x === "object" && x.url && x.type !== "ingredient" && norm(x.nom) === norm(nom));
+    return e ? e.url : null;
+  };
   function trouverRecette(nom) {
     if (!nom) return null;
+    const duLien = recetteDuLien(lienDeLEnvie(nom));
+    if (duLien) return duLien;
+    // le lien n'est pas encore dans la base : en attendant, la recette de ce nom s'il y en a une (elle cède la place
+    // toute seule à l'arrivée de celle du lien, voir appliquerDemandesArrivees)
     const exact = getR(nom);
     if (exact) return exact;
     // v41 : la recette que le guetteur du PC a associée à cette envie (suivi sur le hub). Sa recherche
@@ -1892,8 +1906,9 @@
   // texte (et classe) du suivi d'une envie de plat ; maj = recette à récupérer par une mise à jour
   // jour : celui de l'envie. Une recette qui contient un ingrédient exclu n'est jamais tirée au sort : elle
   // n'arrive au menu qu'imposée sur un jour (v41, le guetteur la propose quand il n'a rien trouvé d'autre).
-  function statutEnvie(nom, jour) {
-    const r = trouverRecette(nom);
+  // url : le lien de l'envie (v50) ; seule la recette de CE lien la satisfait
+  function statutEnvie(nom, jour, url) {
+    const r = url ? recetteDuLien(url) : trouverRecette(nom);
     const s = suiviEnvie(nom);
     if (r) {
       let txt = s && s.etat === "ajoutee" ? `ajoutée par le PC : ${r.nom}` : `dans ta base : ${r.nom}`;
@@ -1918,10 +1933,13 @@
   }
   /** Recettes ajoutées par le PC mais absentes de cette version de l'app : à récupérer. */
   function ajoutsEnAttente() {
-    return state.envies.filter((e) => !estEnvieIngr(e)).map((e) => (e && e.nom ? e.nom : e)).filter((nom) => {
+    return state.envies.filter((e) => !estEnvieIngr(e)).filter((e) => {
+      const nom = e && e.nom ? e.nom : e;
       const s = suiviEnvie(nom);
-      return !!s && s.etat === "ajoutee" && Date.now() - (s.t || 0) < 7 * JOUR_MS && !trouverRecette(nom);
-    });
+      // envie avec lien (v50) : en attente tant que la recette de CE lien manque, même si une autre a son nom
+      const la = e && e.url ? recetteDuLien(e.url) : trouverRecette(nom);
+      return !!s && s.etat === "ajoutee" && Date.now() - (s.t || 0) < 7 * JOUR_MS && !la;
+    }).map((e) => (e && e.nom ? e.nom : e));
   }
   // la recette ajoutée par le PC arrive toute seule : mise à jour de l'app (au plus un essai toutes les 2 min)
   let dernierEssaiMaj = 0;
@@ -1982,7 +2000,7 @@
       const s1 = !!(e && typeof e === "object" && rangDe(e) === rangCourant() + 1);
       const meta = ["plat", jour ? `pour ${jourLong(jour)}` : "", s1 ? "semaine prochaine" : "", e && e.url ? "lien fourni" : ""].filter(Boolean).join(" · ");
       // même recherche souple que le menu (trouverRecette) : « Tendron de veau » est bien dans la base
-      h += ligneEnvie(i, nom, meta, statutEnvie(nom, jour));
+      h += ligneEnvie(i, nom, meta, statutEnvie(nom, jour, e && e.url));
     });
     return h + `</div>`;
   }
