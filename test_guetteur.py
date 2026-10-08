@@ -10,6 +10,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import types
 import unittest
@@ -418,6 +419,90 @@ class Version(unittest.TestCase):
                 self.assertEqual(b.count(b"\r\n"), b.count(b"\n"), n)
         finally:
             shutil.rmtree(d)
+
+
+class HubCapricieux(unittest.TestCase):
+    """Google renvoie parfois une page d'erreur HTML (404, en allemand) au lieu de la réponse du script. Mesuré le
+    08/10 : 1 lecture sur 10. Avant, la passe entière était perdue (« erreur : Expecting value », 5 fois les 07 et
+    08/10). Le guetteur réessaie désormais, la lecture comme l'écriture ; un vrai refus du script, jamais."""
+    PAGE_GOOGLE = (b'<!DOCTYPE html><html lang="de"><head><title>Fehler 404 (Nicht gefunden)</title></head>'
+                   b'<body><p>Die angeforderte URL wurde nicht gefunden.</p></body></html>')
+
+    def setUp(self):
+        import test_hub as FH
+        FH.ETAT = {}
+        page = self.PAGE_GOOGLE
+
+        class Capricieux(FH.H):
+            pannes, appels = 0, 0
+
+            def _panne(self):
+                Capricieux.appels += 1
+                if Capricieux.pannes <= 0:
+                    return False
+                Capricieux.pannes -= 1
+                self.send_response(404)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
+                self.end_headers()
+                self.wfile.write(page)
+                return True
+
+            def do_GET(self):
+                if not self._panne():
+                    super().do_GET()
+
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                corps = self.rfile.read(n)
+                if self._panne():
+                    return
+                # rejoue la requête lue pour le faux hub d'origine
+                import io
+                self.rfile = io.BytesIO(corps)
+                super().do_POST()
+
+        from http.server import ThreadingHTTPServer
+        self.C = Capricieux
+        self.serveur = ThreadingHTTPServer(("127.0.0.1", 0), Capricieux)
+        threading.Thread(target=self.serveur.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.serveur.server_address[1]}/"
+        self.pauses = getattr(G, "PAUSES_HUB", None)
+        G.PAUSES_HUB = (0, 0)
+
+    def tearDown(self):
+        self.serveur.shutdown()
+        self.serveur.server_close()
+        if self.pauses is not None:
+            G.PAUSES_HUB = self.pauses
+
+    def test_lecture_reessayee_apres_la_page_d_erreur_de_google(self):
+        self.C.pannes = 2
+        etat = G.lire_hub(self.url, "test-token")
+        self.assertEqual(etat, {})
+        self.assertEqual(self.C.appels, 3)
+
+    def test_ecriture_reessayee_et_ecrite_une_seule_fois(self):
+        self.C.pannes = 1
+        G.ecrire_statuts(self.url, "test-token", {"chili con carne": {"etat": "ajoutee"}})
+        self.assertEqual(self.C.appels, 2)
+        etat = G.lire_hub(self.url, "test-token")
+        self.assertEqual(etat["guetteur"]["v"]["envies"], {"chili con carne": {"etat": "ajoutee"}})
+
+    def test_message_lisible_quand_google_ne_repond_jamais(self):
+        self.C.pannes = 99
+        with self.assertRaises(RuntimeError) as ctx:
+            G.lire_hub(self.url, "test-token")
+        self.assertIn("page d'erreur de Google", str(ctx.exception))
+        self.assertIn("404", str(ctx.exception))
+        self.assertNotIn("test-token", str(ctx.exception))   # jamais le mot de passe dans le journal
+        self.assertEqual(self.C.appels, G.ESSAIS_HUB)
+
+    def test_mauvais_mot_de_passe_jamais_reessaye(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            G.lire_hub(self.url, "mauvais-mot-de-passe")
+        self.assertIn("refuse", str(ctx.exception))
+        self.assertEqual(self.C.appels, 1)
 
 
 class Hub(unittest.TestCase):

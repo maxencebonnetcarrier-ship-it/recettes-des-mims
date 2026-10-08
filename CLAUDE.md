@@ -167,6 +167,10 @@ ligne tout seul ». Une passe toutes les 30 min (tâche planifiée « Recettes d
 - **lancé par pythonw, sans console** : `sans_console()` envoie les sorties dans le vide. Avant la v43, la
   lecture Glaneur écrivait dans `sys.stderr` (`None`) et chaque passe planta les 06 et 07/10. Glaneur tourne
   sans fenêtre ;
+- **partage capricieux** (v51, 08/10) : Google renvoie parfois une page d'erreur HTML (404) au lieu de la réponse
+  du script, 1 lecture sur 10 mesurée. `appel_hub` réessaie la lecture et l'écriture (3 essais, 5 puis 15 s, chaque
+  essai noté au journal) ; un refus du script (mauvais mot de passe) n'est jamais réessayé. Avant, la passe était
+  perdue (« erreur : Expecting value », 5 fois les 07 et 08/10). `test_guetteur.py`, classe `HubCapricieux` ;
 - un plat introuvable ou refusé est retenté 24 h plus tard. Journal, plans et log :
   `%LOCALAPPDATA%\mims-guetteur` ;
 - **écrit où en est chaque envie** sur le hub (v38), champ `guetteur` : `{ passe, envies: { nom normalisé :

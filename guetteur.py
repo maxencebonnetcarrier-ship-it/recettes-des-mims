@@ -51,6 +51,10 @@ MAX_PAR_PASSE = 3
 MAX_PAGES_LUES = 6
 MAX_PAGES_LARGES = 12   # recherche élargie : pages lues pour vérifier leurs ingrédients
 PAUSE = 1.0             # entre deux pages d'un même site (0 dans les tests)
+# Partage (hub Google Apps Script) : Google renvoie parfois une page d'erreur HTML (404) au lieu de la réponse du
+# script. Mesuré le 08/10 : 1 lecture sur 10, la suivante passe. Avant, la passe entière était perdue.
+ESSAIS_HUB = 3
+PAUSES_HUB = (5, 15)    # secondes avant le 2e, puis le 3e essai (0 dans les tests)
 SITES = [  # ordre = préférence à égalité ; plans de site déclarés par les sites eux-mêmes
     {"id": "marmiton", "index": "https://www.marmiton.org/wsitemap_recipes_index.xml",
      "fichier": r"wsitemap_recipes_\d+", "recette": r"/recettes/recette_[^/]+\.aspx$"},
@@ -272,18 +276,45 @@ def raison_courte(detail):
     return " · ".join(raisons)[:160]
 
 
+class ReponseHorsScript(Exception):
+    """Ce qui revient du hub n'est pas la réponse du script : page d'erreur de Google, coupure réseau."""
+
+
+def appel_hub(requete, quoi):
+    """Envoie une requête au hub et rend sa réponse JSON. `requete` fabrique la requête (une neuve par essai).
+    Réessaie ESSAIS_HUB fois quand la réponse n'est pas celle du script (page d'erreur HTML de Google, connexion
+    coupée) : c'est passager côté Google. Un REFUS du script lui-même (JSON « ok: false », mauvais mot de passe)
+    est rendu tel quel, jamais réessayé. Réenvoyer une écriture est sans risque : le hub garde, champ par champ,
+    la valeur à l'horodatage le plus récent, et le patch réenvoyé porte le même horodatage."""
+    for n in range(1, ESSAIS_HUB + 1):
+        try:
+            try:
+                rep = urllib.request.urlopen(requete(), timeout=60)
+                code, corps = rep.status, rep.read()
+            except urllib.error.HTTPError as e:
+                code, corps = e.code, e.read()
+            try:
+                return json.loads(corps.decode("utf-8"))
+            except ValueError:
+                raise ReponseHorsScript(f"le hub a renvoyé une page d'erreur de Google (code {code}) au lieu de ses données")
+        except (ReponseHorsScript, urllib.error.URLError, TimeoutError, ConnectionError) as err:
+            # jamais l'adresse dans le message : elle porte le mot de passe en lecture
+            motif = str(err.reason) if isinstance(err, urllib.error.URLError) else str(err) or type(err).__name__
+            if n >= ESSAIS_HUB:
+                raise RuntimeError(f"{quoi} impossible après {ESSAIS_HUB} essais : {motif}") from None
+            pause = PAUSES_HUB[min(n - 1, len(PAUSES_HUB) - 1)]
+            log(f"{quoi} : {motif}, nouvel essai dans {pause} s")
+            if pause:
+                time.sleep(pause)
+
+
 def ecrire_statuts(url, token, statuts):
     """Écrit le suivi sur le hub. Ne touche à aucun autre champ (le hub fusionne champ par champ)."""
     t = int(time.time() * 1000)
     corps = json.dumps({"token": token, "patch": {"guetteur": {"v": {"passe": t, "envies": statuts}, "t": t}}},
                        ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=corps, method="POST",
-                                 headers={"Content-Type": "text/plain;charset=utf-8", "User-Agent": UA})
-    try:
-        reponse = urllib.request.urlopen(req, timeout=60).read()
-    except urllib.error.HTTPError as e:
-        reponse = e.read()
-    j = json.loads(reponse.decode("utf-8"))
+    j = appel_hub(lambda: urllib.request.Request(url, data=corps, method="POST", headers={
+        "Content-Type": "text/plain;charset=utf-8", "User-Agent": UA}), "écriture du suivi sur le partage")
     if not j.get("ok"):
         raise RuntimeError("le hub refuse l'écriture (" + str(j.get("error") or "refus") + ")")
 
@@ -328,12 +359,8 @@ def reglage(nom):
 
 def lire_hub(url, token):
     sep = "&" if "?" in url else "?"
-    req = urllib.request.Request(url + sep + "token=" + urllib.parse.quote(token), headers={"User-Agent": UA})
-    try:
-        corps = urllib.request.urlopen(req, timeout=60).read()
-    except urllib.error.HTTPError as e:
-        corps = e.read()
-    j = json.loads(corps.decode("utf-8"))
+    j = appel_hub(lambda: urllib.request.Request(url + sep + "token=" + urllib.parse.quote(token),
+                                                 headers={"User-Agent": UA}), "lecture du partage")
     if not j.get("ok"):
         raise RuntimeError("le hub refuse la lecture (" + str(j.get("error") or "refus") + ")")
     return j.get("state") or {}
