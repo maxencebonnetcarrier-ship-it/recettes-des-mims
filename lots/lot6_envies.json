@@ -330,5 +330,109 @@
   "saison": "Toute l'année",
   "tags": [],
   "demande": true
+ },
+ {
+  "nom": "Chili con carne (ton lien)",
+  "url": "https://www.marmiton.org/recettes/recette_chili-con-carne-facile_15415.aspx",
+  "prep_min": 10,
+  "cuisson_min": 25,
+  "total_min": 35,
+  "parts_origine": 4,
+  "etapes": [
+   "Préchauffer le four à 180°C (thermostat 6).",
+   "Hacher l'oignon et l'ail.",
+   "Dans une cocotte en fonte, faire fondre le beurre, et ensuite dorer doucement l'oignon et l’ail.",
+   "Incorporer le boeuf haché et laisser cuire doucement 10 min.",
+   "Mélanger le chili, le cumin, le concentré de tomates, et incorporer le tout au boeuf. Ajouter les haricots, le bouillon, du sel et du poivre.",
+   "Couvrir et cuire 25 min au four."
+  ],
+  "source": "Marmiton",
+  "ingredients": [
+   {
+    "nom": "beurre",
+    "qte": 50,
+    "unite": "g",
+    "rayon": "Crèmerie"
+   },
+   {
+    "nom": "oignons",
+    "qte": 2,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "ail écrasées",
+    "qte": 2,
+    "unite": "gousses",
+    "rayon": "Fruits & légumes"
+   },
+   {
+    "nom": "boeuf haché",
+    "qte": 500,
+    "unite": "g",
+    "rayon": "Boucherie"
+   },
+   {
+    "nom": "chili en poudre",
+    "qte": 1,
+    "unite": "cuillère à café",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "cumin en poudre",
+    "qte": 2,
+    "unite": "cuillères à café",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "concentré de tomates",
+    "qte": 65,
+    "unite": "g",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "haricots rouges égouttés",
+    "qte": 1,
+    "unite": "grosse boîte",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "bouillon de boeuf",
+    "qte": 30,
+    "unite": "cl",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "sel",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "poivre",
+    "qte": null,
+    "unite": "",
+    "rayon": "Épicerie"
+   },
+   {
+    "nom": "persil pour décorer",
+    "qte": null,
+    "unite": "",
+    "rayon": "Fruits & légumes"
+   }
+  ],
+  "cout": "Bon marché",
+  "photo": "https://assets.afcdn.com/recipe/20211222/126214_w1024h1024c1cx1124cy721cxt0cyt0cxb2119cyb1415.jpg",
+  "video": "https://assets.afcdn.com/video13/20221014/v_762056_HD.mp4",
+  "proteine": "bœuf",
+  "cuissons": [
+   "four",
+   "cocotte"
+  ],
+  "cat": "Rapide (sport)",
+  "saison": "Toute l'année",
+  "tags": [],
+  "demande": true,
+  "kcal_part": 700
  }
 ]
